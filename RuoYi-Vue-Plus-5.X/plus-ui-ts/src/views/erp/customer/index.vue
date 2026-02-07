@@ -293,7 +293,7 @@
             <el-form-item label="所在地区" prop="companyProvince">
               <el-cascader
                 v-model="companyRegion"
-                :options="pcaTextArr"
+                :options="(pcaTextArr as any)"
                 placeholder="请选择省/市/区"
                 style="width: 100%"
                 clearable
@@ -313,7 +313,7 @@
             <el-form-item label="收货地区" prop="deliveryProvince">
               <el-cascader
                 v-model="deliveryRegion"
-                :options="pcaTextArr"
+                :options="(pcaTextArr as any)"
                 placeholder="请选择省/市/区"
                 style="width: 100%"
                 clearable

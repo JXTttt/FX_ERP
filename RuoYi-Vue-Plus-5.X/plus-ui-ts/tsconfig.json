@@ -1,12 +1,17 @@
 {
   "$schema": "https://json.schemastore.org/tsconfig",
   "compilerOptions": {
+    "ignoreDeprecations": "6.0",
     "baseUrl": ".",
     // https://vite.dev/config/build-options.html#build-target
     "target": "ES2020",
     "module": "ESNext",
     "moduleResolution": "Bundler",
-    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    "lib": [
+      "ESNext",
+      "DOM",
+      "DOM.Iterable"
+    ],
     "skipLibCheck": true,
     // This setting lets you specify a file for storing incremental compilation information as a part of composite projects which enables faster building of larger TypeScript codebases.
     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.tsbuildinfo",
@@ -18,9 +23,14 @@
     "esModuleInterop": true,
     "noEmit": true,
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": [
+        "./src/*"
+      ]
     },
-    "types": ["node", "vite/client"],
+    "types": [
+      "node",
+      "vite/client"
+    ],
     // 自定义配置
     "noImplicitAny": false, // 禁用 隐式的any错误
     "removeComments": true, // 移除 ts注释
@@ -38,5 +48,9 @@
     "eslint.config.ts",
     "src/**/*.d.ts"
   ],
-  "exclude": ["node_modules", "dist", "src/**/__tests__/*"]
+  "exclude": [
+    "node_modules",
+    "dist",
+    "src/**/__tests__/*"
+  ]
 }
