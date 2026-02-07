@@ -73,14 +73,17 @@ public class BizCustomerServiceImpl implements IBizCustomerService {
     private LambdaQueryWrapper<BizCustomer> buildQueryWrapper(BizCustomerBo bo) {
         Map<String, Object> params = bo.getParams();
         LambdaQueryWrapper<BizCustomer> lqw = Wrappers.lambdaQuery();
+
+        // --- 1. ID与文本字段 ---
         lqw.eq(bo.getId() != null, BizCustomer::getId, bo.getId());
-        lqw.orderByAsc(BizCustomer::getId);
         lqw.like(StringUtils.isNotBlank(bo.getCompanyName()), BizCustomer::getCompanyName, bo.getCompanyName());
         lqw.eq(StringUtils.isNotBlank(bo.getCustomerCode()), BizCustomer::getCustomerCode, bo.getCustomerCode());
         lqw.like(StringUtils.isNotBlank(bo.getShortName()), BizCustomer::getShortName, bo.getShortName());
         lqw.like(StringUtils.isNotBlank(bo.getContactPerson()), BizCustomer::getContactPerson, bo.getContactPerson());
         lqw.like(StringUtils.isNotBlank(bo.getContactPhone()), BizCustomer::getContactPhone, bo.getContactPhone());
         lqw.eq(StringUtils.isNotBlank(bo.getCustomerType()), BizCustomer::getCustomerType, bo.getCustomerType());
+
+        // --- 2. 地址信息 ---
         lqw.eq(StringUtils.isNotBlank(bo.getCompanyProvince()), BizCustomer::getCompanyProvince, bo.getCompanyProvince());
         lqw.eq(StringUtils.isNotBlank(bo.getCompanyCity()), BizCustomer::getCompanyCity, bo.getCompanyCity());
         lqw.eq(StringUtils.isNotBlank(bo.getCompanyDistrict()), BizCustomer::getCompanyDistrict, bo.getCompanyDistrict());
@@ -90,14 +93,21 @@ public class BizCustomerServiceImpl implements IBizCustomerService {
         lqw.eq(StringUtils.isNotBlank(bo.getDeliveryDistrict()), BizCustomer::getDeliveryDistrict, bo.getDeliveryDistrict());
         lqw.eq(StringUtils.isNotBlank(bo.getDeliveryAddress()), BizCustomer::getDeliveryAddress, bo.getDeliveryAddress());
         lqw.eq(StringUtils.isNotBlank(bo.getDeliveryUnit()), BizCustomer::getDeliveryUnit, bo.getDeliveryUnit());
+
+        // --- 3. 财务与业务员 (Long/BigDecimal 类型，必须用 != null) ---
         lqw.eq(StringUtils.isNotBlank(bo.getBankAccountInfo()), BizCustomer::getBankAccountInfo, bo.getBankAccountInfo());
         lqw.eq(bo.getTotalDealAmount() != null, BizCustomer::getTotalDealAmount, bo.getTotalDealAmount());
         lqw.eq(bo.getTotalOweAmount() != null, BizCustomer::getTotalOweAmount, bo.getTotalOweAmount());
         lqw.eq(bo.getSalesManId() != null, BizCustomer::getSalesManId, bo.getSalesManId());
-        lqw.eq(StringUtils.isNotBlank(bo.getCreateBy()), BizCustomer::getCreateBy, bo.getCreateBy());
+
+        // --- 4. 关键修正点：创建人/更新人是 Long 类型 ---
+        // ❌ 错误代码：lqw.eq(StringUtils.isNotBlank(bo.getCreateBy())...
+        // ✅ 正确代码：
+        lqw.eq(bo.getCreateBy() != null, BizCustomer::getCreateBy, bo.getCreateBy());
         lqw.eq(bo.getCreateTime() != null, BizCustomer::getCreateTime, bo.getCreateTime());
-        lqw.eq(StringUtils.isNotBlank(bo.getUpdateBy()), BizCustomer::getUpdateBy, bo.getUpdateBy());
+        lqw.eq(bo.getUpdateBy() != null, BizCustomer::getUpdateBy, bo.getUpdateBy());
         lqw.eq(bo.getUpdateTime() != null, BizCustomer::getUpdateTime, bo.getUpdateTime());
+
         return lqw;
     }
 

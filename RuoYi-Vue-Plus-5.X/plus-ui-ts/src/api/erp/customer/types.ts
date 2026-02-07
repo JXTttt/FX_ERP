@@ -127,6 +127,7 @@ export interface CustomerVO {
 }
 
 export interface CustomerForm extends BaseEntity {
+  id?: string | number;
   /**
    * 客户公司全称
    */

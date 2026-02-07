@@ -23,20 +23,25 @@ public class BizCustomerBo extends BaseEntity {
 
     /**
      * 主键ID
+     * 修正点1：$Group 改为 EditGroup.class
+     * 解释：只有在“修改”时，ID 才是必须的。新增时 ID 是空的。
      */
-    @NotNull(message = "主键ID不能为空", groups = { $Group })
+    @NotNull(message = "主键ID不能为空", groups = { EditGroup.class })
     private Long id;
 
     /**
      * 客户公司全称
+     * 修正点2：增加 AddGroup.class
+     * 解释：客户名称在“新增”和“修改”时都不能为空。
      */
-    @NotBlank(message = "客户公司全称不能为空", groups = { EditGroup.class })
+    @NotBlank(message = "客户公司全称不能为空", groups = { AddGroup.class, EditGroup.class })
     private String companyName;
 
     /**
      * 客户编码(唯一标识)
+     * 修正点3：增加 AddGroup.class
      */
-    @NotBlank(message = "客户编码(唯一标识)不能为空", groups = { EditGroup.class })
+    @NotBlank(message = "客户编码(唯一标识)不能为空", groups = { AddGroup.class, EditGroup.class })
     private String customerCode;
 
     /**
@@ -128,6 +133,5 @@ public class BizCustomerBo extends BaseEntity {
      * 备注
      */
     private String remark;
-
 
 }
