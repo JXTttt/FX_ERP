@@ -3,7 +3,7 @@
     <el-row :gutter="20">
       <el-col :sm="24" :lg="12" style="padding-left: 20px">
         <h2>RuoYi-Vue-Plus多租户管理系统</h2>
-        <p>
+        <!-- <p>
           RuoYi-Vue-Plus 是基于 RuoYi-Vue 针对 分布式集群 场景升级(不兼容原框架)
           <br />
           * 前端开发框架 Vue3、TS、Element Plus<br />
@@ -32,23 +32,23 @@
           * 代码生成器 适配MP、SpringDoc规范化代码 一键生成前后端代码<br />
           * 部署方式 Docker 容器编排 一键部署业务集群<br />
           * 国际化 SpringMessage Spring标准国际化方案<br />
-        </p>
-        <p><b>当前版本:</b> <span>v5.5.3</span></p>
-        <p>
+        </p> -->
+        <!-- <p><b>当前版本:</b> <span>v5.5.3</span></p> -->
+        <!-- <p>
           <el-tag type="danger">&yen;免费开源</el-tag>
-        </p>
-        <p>
+        </p> -->
+        <!-- <p>
           <el-button type="primary" icon="Cloudy" plain @click="goTarget('https://gitee.com/dromara/RuoYi-Vue-Plus')">访问码云</el-button>
           <el-button type="primary" icon="Cloudy" plain @click="goTarget('https://github.com/dromara/RuoYi-Vue-Plus')">访问GitHub</el-button>
           <el-button type="primary" icon="Cloudy" plain @click="goTarget('https://plus-doc.dromara.org/#/ruoyi-vue-plus/changlog')"
             >更新日志</el-button
           >
-        </p>
+        </p> -->
       </el-col>
 
       <el-col :sm="24" :lg="12" style="padding-left: 20px">
         <h2>RuoYi-Cloud-Plus多租户微服务管理系统</h2>
-        <p>
+        <!-- <p>
           RuoYi-Cloud-Plus 微服务通用权限管理系统 重写 RuoYi-Cloud 全方位升级(不兼容原框架)
           <br />
           * 前端开发框架 Vue3、TS、Element UI<br />
@@ -76,18 +76,18 @@
           * 分布式日志中心 ELK 业界成熟解决方案<br />
           * 分布式监控 Prometheus、Grafana 全方位性能监控<br />
           * 其余与 Vue 版本一致<br />
-        </p>
-        <p><b>当前版本:</b> <span>v2.5.3</span></p>
-        <p>
+        </p> -->
+        <!-- <p><b>当前版本:</b> <span>v2.5.3</span></p> -->
+        <!-- <p>
           <el-tag type="danger">&yen;免费开源</el-tag>
-        </p>
-        <p>
+        </p> -->
+        <!-- <p>
           <el-button type="primary" icon="Cloudy" plain @click="goTarget('https://gitee.com/dromara/RuoYi-Cloud-Plus')">访问码云</el-button>
           <el-button type="primary" icon="Cloudy" plain @click="goTarget('https://github.com/dromara/RuoYi-Cloud-Plus')">访问GitHub</el-button>
           <el-button type="primary" icon="Cloudy" plain @click="goTarget('https://plus-doc.dromara.org/#/ruoyi-cloud-plus/changlog')"
             >更新日志</el-button
           >
-        </p>
+        </p> -->
       </el-col>
     </el-row>
     <el-divider />
