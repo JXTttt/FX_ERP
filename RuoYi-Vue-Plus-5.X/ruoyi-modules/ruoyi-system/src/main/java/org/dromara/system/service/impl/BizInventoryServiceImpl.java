@@ -73,21 +73,31 @@ public class BizInventoryServiceImpl implements IBizInventoryService {
     private LambdaQueryWrapper<BizInventory> buildQueryWrapper(BizInventoryBo bo) {
         Map<String, Object> params = bo.getParams();
         LambdaQueryWrapper<BizInventory> lqw = Wrappers.lambdaQuery();
+
+        // ID 判空
         lqw.eq(bo.getId() != null, BizInventory::getId, bo.getId());
-        lqw.orderByAsc(BizInventory::getId);
+
+        // 字符串类型使用 isNotBlank
         lqw.eq(StringUtils.isNotBlank(bo.getUniqueCode()), BizInventory::getUniqueCode, bo.getUniqueCode());
         lqw.eq(StringUtils.isNotBlank(bo.getItemType()), BizInventory::getItemType, bo.getItemType());
         lqw.like(StringUtils.isNotBlank(bo.getItemName()), BizInventory::getItemName, bo.getItemName());
         lqw.eq(StringUtils.isNotBlank(bo.getSpec()), BizInventory::getSpec, bo.getSpec());
-        lqw.eq(bo.getCurrentQty() != null, BizInventory::getCurrentQty, bo.getCurrentQty());
         lqw.eq(StringUtils.isNotBlank(bo.getUnit()), BizInventory::getUnit, bo.getUnit());
+
+        // 数值类型 (BigDecimal/Long) 使用 != null
+        lqw.eq(bo.getCurrentQty() != null, BizInventory::getCurrentQty, bo.getCurrentQty());
         lqw.eq(bo.getSupplierId() != null, BizInventory::getSupplierId, bo.getSupplierId());
         lqw.eq(bo.getPurchasePrice() != null, BizInventory::getPurchasePrice, bo.getPurchasePrice());
         lqw.eq(bo.getTotalAmount() != null, BizInventory::getTotalAmount, bo.getTotalAmount());
-        lqw.eq(StringUtils.isNotBlank(bo.getCreateBy()), BizInventory::getCreateBy, bo.getCreateBy());
+
+        // --------------------------------------------------------------------------
+        // 🛑 修正重点：创建人/更新人是 Long 类型，必须用 != null，不能用 isNotBlank
+        // --------------------------------------------------------------------------
+        lqw.eq(bo.getCreateBy() != null, BizInventory::getCreateBy, bo.getCreateBy());
         lqw.eq(bo.getCreateTime() != null, BizInventory::getCreateTime, bo.getCreateTime());
-        lqw.eq(StringUtils.isNotBlank(bo.getUpdateBy()), BizInventory::getUpdateBy, bo.getUpdateBy());
+        lqw.eq(bo.getUpdateBy() != null, BizInventory::getUpdateBy, bo.getUpdateBy());
         lqw.eq(bo.getUpdateTime() != null, BizInventory::getUpdateTime, bo.getUpdateTime());
+
         return lqw;
     }
 

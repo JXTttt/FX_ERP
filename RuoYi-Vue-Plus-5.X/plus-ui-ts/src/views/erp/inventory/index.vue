@@ -4,9 +4,9 @@
       <div v-show="showSearch" class="mb-[10px]">
         <el-card shadow="hover">
           <el-form ref="queryFormRef" :model="queryParams" :inline="true">
-            <el-form-item label="主键ID" prop="id">
+            <!-- <el-form-item label="主键ID" prop="id">
               <el-input v-model="queryParams.id" placeholder="请输入主键ID" clearable @keyup.enter="handleQuery" />
-            </el-form-item>
+            </el-form-item> -->
             <el-form-item label="专用码" prop="uniqueCode">
               <el-input v-model="queryParams.uniqueCode" placeholder="请输入专用码" clearable @keyup.enter="handleQuery" />
             </el-form-item>
@@ -21,23 +21,23 @@
             <el-form-item label="规格" prop="spec">
               <el-input v-model="queryParams.spec" placeholder="请输入规格" clearable @keyup.enter="handleQuery" />
             </el-form-item>
-            <el-form-item label="当前库存量" prop="currentQty">
+            <!-- <el-form-item label="当前库存量" prop="currentQty">
               <el-input v-model="queryParams.currentQty" placeholder="请输入当前库存量" clearable @keyup.enter="handleQuery" />
-            </el-form-item>
-            <el-form-item label="单位" prop="unit">
+            </el-form-item> -->
+            <!-- <el-form-item label="单位" prop="unit">
               <el-select v-model="queryParams.unit" placeholder="请选择单位" clearable >
                 <el-option v-for="dict in erp_item_unit" :key="dict.value" :label="dict.label" :value="dict.value"/>
               </el-select>
-            </el-form-item>
-            <el-form-item label="供应商ID" prop="supplierId">
+            </el-form-item> -->
+            <!-- <el-form-item label="供应商ID" prop="supplierId">
               <el-input v-model="queryParams.supplierId" placeholder="请输入供应商ID" clearable @keyup.enter="handleQuery" />
-            </el-form-item>
-            <el-form-item label="采购单价" prop="purchasePrice">
+            </el-form-item> -->
+            <!-- <el-form-item label="采购单价" prop="purchasePrice">
               <el-input v-model="queryParams.purchasePrice" placeholder="请输入采购单价" clearable @keyup.enter="handleQuery" />
-            </el-form-item>
-            <el-form-item label="总金额" prop="totalAmount">
+            </el-form-item> -->
+            <!-- <el-form-item label="总金额" prop="totalAmount">
               <el-input v-model="queryParams.totalAmount" placeholder="请输入总金额" clearable @keyup.enter="handleQuery" />
-            </el-form-item>
+            </el-form-item> -->
             <el-form-item label="" prop="createBy">
               <el-input v-model="queryParams.createBy" placeholder="请输入" clearable @keyup.enter="handleQuery" />
             </el-form-item>

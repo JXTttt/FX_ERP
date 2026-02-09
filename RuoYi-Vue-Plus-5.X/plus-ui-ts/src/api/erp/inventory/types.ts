@@ -72,6 +72,7 @@ export interface InventoryVO {
 }
 
 export interface InventoryForm extends BaseEntity {
+  id?: number | string;
   /**
    * 专用码
    */
