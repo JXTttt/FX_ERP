@@ -207,4 +207,9 @@ public class BizWorkOrderVo implements Serializable {
      */
     private List<BizWoExtraPurchaseVo> extraPurchaseList;
 
+    /**
+     * 产品明细子表列表
+     */
+    private List<BizWoProductVo> productList;
+
 }

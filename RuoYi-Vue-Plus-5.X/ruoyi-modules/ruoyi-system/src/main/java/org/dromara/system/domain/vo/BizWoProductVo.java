@@ -7,7 +7,7 @@ import org.dromara.common.excel.annotation.ExcelDictFormat;
 import org.dromara.common.excel.convert.ExcelDictConvert;
 import io.github.linpeilie.annotations.AutoMapper;
 import lombok.Data;
-
+import org.dromara.system.domain.vo.BizWoProductVo;
 import java.io.Serial;
 import java.io.Serializable;
 import java.util.Date;
@@ -29,7 +29,7 @@ public class BizWoProductVo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     /**
-     * 
+     *
      */
     @ExcelProperty(value = "")
     private Long id;

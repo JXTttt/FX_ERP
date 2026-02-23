@@ -3,13 +3,16 @@ package org.dromara.system.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+//import com.warm.flow.core.service.InsService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.dromara.common.core.utils.DateUtils;
+import org.dromara.common.core.exception.ServiceException;
 import org.dromara.common.core.utils.MapstructUtils;
+import org.dromara.common.core.utils.SpringUtils;
 import org.dromara.common.core.utils.StringUtils;
 import org.dromara.common.mybatis.core.page.PageQuery;
 import org.dromara.common.mybatis.core.page.TableDataInfo;
+import org.dromara.system.domain.bo.WorkOrderCreatedEvent;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,6 +24,7 @@ import org.dromara.system.mapper.BizWorkOrderMapper;
 import org.dromara.system.service.IBizWorkOrderService;
 
 // 引入子表实体
+import org.dromara.system.domain.BizWoProduct;
 import org.dromara.system.domain.BizWoMaterial;
 import org.dromara.system.domain.BizWoCtp;
 import org.dromara.system.domain.BizWoPrint;
@@ -28,6 +32,7 @@ import org.dromara.system.domain.BizWoPostProcess;
 import org.dromara.system.domain.BizWoExtraPurchase;
 
 // 引入子表Mapper
+import org.dromara.system.mapper.BizWoProductMapper;
 import org.dromara.system.mapper.BizWoMaterialMapper;
 import org.dromara.system.mapper.BizWoCtpMapper;
 import org.dromara.system.mapper.BizWoPrintMapper;
@@ -52,20 +57,22 @@ public class BizWorkOrderServiceImpl implements IBizWorkOrderService {
 
     private final BizWorkOrderMapper baseMapper;
 
-    // 👇 1. 注入 5 个子表的 Mapper
+    // 注入 6 个子表的 Mapper
+    private final BizWoProductMapper productMapper;
     private final BizWoMaterialMapper materialMapper;
     private final BizWoCtpMapper ctpMapper;
     private final BizWoPrintMapper printMapper;
     private final BizWoPostProcessMapper postProcessMapper;
     private final BizWoExtraPurchaseMapper extraPurchaseMapper;
 
-    /**
-     * 查询工单详情 (不仅查主表，还要把5个子表查出来拼进去)
-     */
+    // 注入 WarmFlow 流程实例服务
+//    private final InsService insService;
+
     @Override
     public BizWorkOrderVo queryById(Long id){
         BizWorkOrderVo vo = baseMapper.selectVoById(id);
         if (vo != null) {
+            vo.setProductList(productMapper.selectVoList(new LambdaQueryWrapper<BizWoProduct>().eq(BizWoProduct::getWorkOrderId, id)));
             vo.setMaterialList(materialMapper.selectVoList(new LambdaQueryWrapper<BizWoMaterial>().eq(BizWoMaterial::getWorkOrderId, id)));
             vo.setCtpList(ctpMapper.selectVoList(new LambdaQueryWrapper<BizWoCtp>().eq(BizWoCtp::getWorkOrderId, id)));
             vo.setPrintList(printMapper.selectVoList(new LambdaQueryWrapper<BizWoPrint>().eq(BizWoPrint::getWorkOrderId, id)));
@@ -91,9 +98,8 @@ public class BizWorkOrderServiceImpl implements IBizWorkOrderService {
     private LambdaQueryWrapper<BizWorkOrder> buildQueryWrapper(BizWorkOrderBo bo) {
         Map<String, Object> params = bo.getParams();
         LambdaQueryWrapper<BizWorkOrder> lqw = Wrappers.lambdaQuery();
-        // 修正了之前存在的Long类型空指针隐患
         lqw.eq(bo.getId() != null, BizWorkOrder::getId, bo.getId());
-        lqw.orderByDesc(BizWorkOrder::getId); // 默认按ID倒序排列，最新的排前面
+        lqw.orderByDesc(BizWorkOrder::getId);
         lqw.eq(StringUtils.isNotBlank(bo.getWorkOrderNo()), BizWorkOrder::getWorkOrderNo, bo.getWorkOrderNo());
         lqw.like(StringUtils.isNotBlank(bo.getCustomerName()), BizWorkOrder::getCustomerName, bo.getCustomerName());
         lqw.like(StringUtils.isNotBlank(bo.getProductName()), BizWorkOrder::getProductName, bo.getProductName());
@@ -103,15 +109,10 @@ public class BizWorkOrderServiceImpl implements IBizWorkOrderService {
         return lqw;
     }
 
-    /**
-     * 新增工单
-     */
     @Override
-    @Transactional(rollbackFor = Exception.class) // 开启事务，保证主子表同时成功或失败
+    @Transactional(rollbackFor = Exception.class)
     public Boolean insertByBo(BizWorkOrderBo bo) {
-        // 自动生成单号逻辑 (YYMMDD + 4位序号)
         if (StringUtils.isBlank(bo.getWorkOrderNo())) {
-
             String dateStr = java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyMMdd"));
             Long count = baseMapper.selectCount(new LambdaQueryWrapper<BizWorkOrder>().likeRight(BizWorkOrder::getWorkOrderNo, dateStr));
             bo.setWorkOrderNo(dateStr + String.format("%04d", count == null ? 0 : count + 1));
@@ -119,45 +120,45 @@ public class BizWorkOrderServiceImpl implements IBizWorkOrderService {
 
         BizWorkOrder add = MapstructUtils.convert(bo, BizWorkOrder.class);
         validEntityBeforeSave(add);
+
+        // 设置初始审核状态为 "1-审批中"
+        add.setAuditStatus("1");
+
         boolean flag = baseMapper.insert(add) > 0;
 
         if (flag) {
-            bo.setId(add.getId()); // 获取生成的主键
-            insertChildren(bo);    // 插入子表数据
+            bo.setId(add.getId());
+            insertChildren(bo);
+
+            // 👇 重点在这里：系统模块不直接调用工作流API，而是发布一个广播（事件）
+            SpringUtils.context().publishEvent(new WorkOrderCreatedEvent(add.getId()));
         }
         return flag;
     }
 
-    /**
-     * 修改工单
-     */
     @Override
-    @Transactional(rollbackFor = Exception.class) // 开启事务
+    @Transactional(rollbackFor = Exception.class)
     public Boolean updateByBo(BizWorkOrderBo bo) {
         BizWorkOrder update = MapstructUtils.convert(bo, BizWorkOrder.class);
         validEntityBeforeSave(update);
         boolean flag = baseMapper.updateById(update) > 0;
 
         if (flag) {
-            // 先删后插：删除旧的子表数据，插入新的子表数据
             deleteChildren(bo.getId());
             insertChildren(bo);
         }
         return flag;
     }
 
-    /**
-     * 删除工单
-     */
     @Override
-    @Transactional(rollbackFor = Exception.class) // 开启事务
+    @Transactional(rollbackFor = Exception.class)
     public Boolean deleteWithValidByIds(Collection<Long> ids, Boolean isValid) {
         if(isValid){
             //TODO 做一些业务上的校验
         }
-        boolean flag = baseMapper.deleteByIds(ids) > 0;
+        // 修复：MyBatis-Plus 的方法名为 deleteBatchIds
+        boolean flag = baseMapper.deleteBatchIds(ids) > 0;
         if (flag) {
-            // 主表删除成功后，一并删除关联的子表数据
             for (Long id : ids) {
                 deleteChildren(id);
             }
@@ -165,37 +166,34 @@ public class BizWorkOrderServiceImpl implements IBizWorkOrderService {
         return flag;
     }
 
-    /**
-     * 辅助方法：保存所有子表数据
-     */
     private void insertChildren(BizWorkOrderBo bo) {
         Long woId = bo.getId();
 
-        // 1. 保存材料
+        if (bo.getProductList() != null && !bo.getProductList().isEmpty()) {
+            List<BizWoProduct> list = MapstructUtils.convert(bo.getProductList(), BizWoProduct.class);
+            list.forEach(i -> { i.setWorkOrderId(woId); i.setId(null); });
+            productMapper.insertBatch(list);
+        }
         if (bo.getMaterialList() != null && !bo.getMaterialList().isEmpty()) {
             List<BizWoMaterial> list = MapstructUtils.convert(bo.getMaterialList(), BizWoMaterial.class);
             list.forEach(i -> { i.setWorkOrderId(woId); i.setId(null); });
             materialMapper.insertBatch(list);
         }
-        // 2. 保存 CTP
         if (bo.getCtpList() != null && !bo.getCtpList().isEmpty()) {
             List<BizWoCtp> list = MapstructUtils.convert(bo.getCtpList(), BizWoCtp.class);
             list.forEach(i -> { i.setWorkOrderId(woId); i.setId(null); });
             ctpMapper.insertBatch(list);
         }
-        // 3. 保存印刷
         if (bo.getPrintList() != null && !bo.getPrintList().isEmpty()) {
             List<BizWoPrint> list = MapstructUtils.convert(bo.getPrintList(), BizWoPrint.class);
             list.forEach(i -> { i.setWorkOrderId(woId); i.setId(null); });
             printMapper.insertBatch(list);
         }
-        // 4. 保存后续加工
         if (bo.getPostProcessList() != null && !bo.getPostProcessList().isEmpty()) {
             List<BizWoPostProcess> list = MapstructUtils.convert(bo.getPostProcessList(), BizWoPostProcess.class);
             list.forEach(i -> { i.setWorkOrderId(woId); i.setId(null); });
             postProcessMapper.insertBatch(list);
         }
-        // 5. 保存其他订购
         if (bo.getExtraPurchaseList() != null && !bo.getExtraPurchaseList().isEmpty()) {
             List<BizWoExtraPurchase> list = MapstructUtils.convert(bo.getExtraPurchaseList(), BizWoExtraPurchase.class);
             list.forEach(i -> { i.setWorkOrderId(woId); i.setId(null); });
@@ -203,10 +201,8 @@ public class BizWorkOrderServiceImpl implements IBizWorkOrderService {
         }
     }
 
-    /**
-     * 辅助方法：删除所有子表数据
-     */
     private void deleteChildren(Long woId) {
+        productMapper.delete(new LambdaQueryWrapper<BizWoProduct>().eq(BizWoProduct::getWorkOrderId, woId));
         materialMapper.delete(new LambdaQueryWrapper<BizWoMaterial>().eq(BizWoMaterial::getWorkOrderId, woId));
         ctpMapper.delete(new LambdaQueryWrapper<BizWoCtp>().eq(BizWoCtp::getWorkOrderId, woId));
         printMapper.delete(new LambdaQueryWrapper<BizWoPrint>().eq(BizWoPrint::getWorkOrderId, woId));
@@ -215,6 +211,5 @@ public class BizWorkOrderServiceImpl implements IBizWorkOrderService {
     }
 
     private void validEntityBeforeSave(BizWorkOrder entity){
-        //TODO 做一些数据校验
     }
 }

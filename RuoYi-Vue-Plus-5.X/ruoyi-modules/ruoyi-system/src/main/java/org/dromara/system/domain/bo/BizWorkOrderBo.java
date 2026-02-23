@@ -175,4 +175,9 @@ public class BizWorkOrderBo extends BaseEntity {
     /** 其他订购子表列表 */
     private List<BizWoExtraPurchaseBo> extraPurchaseList;
 
+    /**
+     * 产品明细子表列表
+     */
+    private List<BizWoProductBo> productList;
+
 }

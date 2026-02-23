@@ -35,7 +35,6 @@
         <el-table-column type="index" width="55" align="center" label="序号" />
         <el-table-column label="工单编号" align="center" prop="workOrderNo" width="130" />
         <el-table-column label="客户名称" align="center" prop="customerName" min-width="150" :show-overflow-tooltip="true" />
-        <el-table-column label="客户PO号" align="center" prop="customerPo" width="120" />
         <el-table-column label="产品名称" align="center" prop="productName" min-width="150" :show-overflow-tooltip="true"/>
         <el-table-column label="订单数量" align="center" prop="orderQuantity" />
         <el-table-column label="生产数量" align="center" prop="produceQuantity" />
@@ -67,66 +66,11 @@
             </el-form-item>
           </el-col>
           <el-col :span="8">
-            <el-form-item label="客户PO号" prop="customerPo">
-              <el-input v-model="form.customerPo" placeholder="请输入客户PO号" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="8">
-            <el-form-item label="客户物料号" prop="customerMaterialNo">
-              <el-input v-model="form.customerMaterialNo" placeholder="请输入客户物料号" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="8">
-            <el-form-item label="产品名称" prop="productName">
-              <el-input v-model="form.productName" placeholder="请输入产品名称(必填)" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="8">
-            <el-form-item label="规格" prop="spec">
-              <el-input v-model="form.spec" placeholder="请输入规格" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="8">
-             <el-form-item label="层数" prop="layers">
-              <el-select v-model="form.layers" placeholder="请选择层数" style="width: 100%" allow-create filterable>
-                <el-option label="单E" value="单E" />
-                <el-option label="单B" value="单B" />
-                <el-option label="EE" value="EE" />
-                <el-option label="BB" value="BB" />
-              </el-select>
-            </el-form-item>
-          </el-col>
-          <el-col :span="8">
-            <el-form-item label="订单数量" prop="orderQuantity">
-              <el-input-number v-model="form.orderQuantity" :min="1" style="width: 100%" placeholder="输入触发自动计算" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="8">
-            <el-form-item label="生产数量" prop="produceQuantity">
-              <el-input-number v-model="form.produceQuantity" :min="1" style="width: 100%" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="8">
-            <el-form-item label="单位" prop="unit">
-              <el-input v-model="form.unit" placeholder="例: 个/张/本" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="8">
             <el-form-item label="交货日期" prop="deliveryDate">
               <el-date-picker clearable v-model="form.deliveryDate" type="date" value-format="YYYY-MM-DD" placeholder="请选择交货日期" style="width: 100%" />
             </el-form-item>
           </el-col>
           <el-col :span="8">
-            <el-form-item label="单价" prop="unitPrice">
-              <el-input-number v-model="form.unitPrice" :precision="4" :step="0.1" :min="0" style="width: 100%" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="8">
-            <el-form-item label="刀版号" prop="knifePlateNo">
-              <el-input v-model="form.knifePlateNo" placeholder="请输入刀版号" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="24">
             <el-form-item label="生产工艺" prop="processOptions">
               <el-cascader
                 v-model="form.processOptions"
@@ -134,14 +78,85 @@
                 :props="{ multiple: true, emitPath: true }"
                 clearable
                 filterable
-                placeholder="请选择所需工艺(支持多级多选)，选中自动生成明细"
+                placeholder="请选择所需工艺(支持多级多选)"
                 style="width: 100%"
               />
             </el-form-item>
           </el-col>
         </el-row>
 
-        <el-tabs type="border-card" class="mt-4">
+        <el-divider content-position="left">产品明细</el-divider>
+        <div class="mb-2">
+          <el-button type="primary" plain icon="Plus" size="small" @click="addProductLine">添加产品</el-button>
+        </div>
+        <el-table :data="form.productList" border size="small" style="margin-bottom: 20px;">
+          <el-table-column type="index" width="50" align="center" label="序号" />
+          <el-table-column label="产品名称(必填)" min-width="150">
+            <template #default="scope">
+              <el-input v-model="scope.row.productName" placeholder="产品名称" />
+            </template>
+          </el-table-column>
+          <el-table-column label="客户PO号" width="120">
+            <template #default="scope">
+              <el-input v-model="scope.row.customerPo" placeholder="PO号" />
+            </template>
+          </el-table-column>
+          <el-table-column label="客户物料号" width="120">
+            <template #default="scope">
+              <el-input v-model="scope.row.customerMaterialNo" placeholder="物料号" />
+            </template>
+          </el-table-column>
+          <el-table-column label="规格" width="120">
+            <template #default="scope">
+              <el-input v-model="scope.row.spec" placeholder="长x宽x高" />
+            </template>
+          </el-table-column>
+          <el-table-column label="层数" width="100">
+            <template #default="scope">
+              <el-select v-model="scope.row.layers" placeholder="层数" allow-create filterable>
+                <el-option label="单E" value="单E" /><el-option label="单B" value="单B" />
+                <el-option label="EE" value="EE" /><el-option label="BB" value="BB" />
+              </el-select>
+            </template>
+          </el-table-column>
+          <el-table-column label="刀版号" width="120">
+            <template #default="scope">
+              <el-input v-model="scope.row.knifePlateNo" placeholder="刀版号" />
+            </template>
+          </el-table-column>
+          <el-table-column label="订单数量" width="120">
+            <template #default="scope">
+              <el-input-number v-model="scope.row.orderQuantity" :min="1" style="width: 100%" @change="(val) => handleOrderQtyChange(val, scope.row)" />
+            </template>
+          </el-table-column>
+          <el-table-column label="生产数量" width="120">
+            <template #default="scope">
+              <el-input-number v-model="scope.row.produceQuantity" :min="1" style="width: 100%" @change="calcProductTotal(scope.row)" />
+            </template>
+          </el-table-column>
+          <el-table-column label="单位" width="80">
+            <template #default="scope">
+              <el-input v-model="scope.row.unit" placeholder="个" />
+            </template>
+          </el-table-column>
+          <el-table-column label="单价" width="110">
+            <template #default="scope">
+              <el-input-number v-model="scope.row.unitPrice" :precision="4" :step="0.1" :min="0" :controls="false" style="width: 100%" @change="calcProductTotal(scope.row)" />
+            </template>
+          </el-table-column>
+          <el-table-column label="总金额" width="100">
+            <template #default="scope">
+              <el-input v-model="scope.row.totalAmount" disabled />
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" width="70" align="center" fixed="right">
+            <template #default="scope">
+              <el-button link type="danger" @click="removeLine('productList', scope.$index)">移除</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+
+        <el-tabs type="border-card">
           <el-tab-pane label="材料清单">
             <div class="mb-2"><el-button type="primary" plain icon="Plus" size="small" @click="addLine('materialList')">添加材料</el-button></div>
             <el-table :data="form.materialList" border size="small">
@@ -160,8 +175,6 @@
               <el-table-column label="操作" width="70" align="center"><template #default="scope"><el-button link type="danger" @click="removeLine('materialList', scope.$index)">移除</el-button></template></el-table-column>
             </el-table>
           </el-tab-pane>
-
-          
 
           <el-tab-pane label="印刷加工">
             <div class="mb-2"><el-button type="primary" plain icon="Plus" size="small" @click="addLine('printList')">添加印刷记录</el-button></div>
@@ -210,6 +223,7 @@
               <el-table-column label="操作" width="70" align="center"><template #default="scope"><el-button link type="danger" @click="removeLine('ctpList', scope.$index)">移除</el-button></template></el-table-column>
             </el-table>
           </el-tab-pane>
+          
           <el-tab-pane label="委外加工单">
             <div class="mb-2"><el-button type="primary" plain icon="Plus" size="small" @click="addLine('outsourcingList')">手动添加外发</el-button></div>
             <el-table :data="form.outsourcingList" border size="small" style="width: 100%;" overflow-x="auto">
@@ -278,6 +292,15 @@
 <script setup name="WorkOrder" lang="ts">
 import { listWorkOrder, getWorkOrder, delWorkOrder, addWorkOrder, updateWorkOrder } from '@/api/erp/workOrder';
 import { listCustomer } from '@/api/erp/customer';
+import { ComponentInternalInstance, computed, onMounted, reactive, ref, toRefs, watch, getCurrentInstance } from 'vue';
+import { ElForm } from 'element-plus';
+
+type ElFormInstance = InstanceType<typeof ElForm>;
+
+interface DialogOption {
+  visible: boolean;
+  title: string;
+}
 
 const { proxy } = getCurrentInstance() as ComponentInternalInstance;
 const workOrderList = ref([]);
@@ -311,20 +334,26 @@ const processTreeData = [
 ];
 
 const initFormData: any = {
-  id: undefined, customerId: undefined, customerName: undefined, productName: undefined,
-  orderQuantity: undefined, produceQuantity: undefined, deliveryDate: undefined,
-  packRequirement: undefined, remark: undefined, // 回归的字段
-  unit: '个', customerPo: undefined, customerMaterialNo: undefined, spec: undefined, layers: undefined, knifePlateNo: undefined, unitPrice: undefined,
+  id: undefined, 
+  customerId: undefined, 
+  customerName: undefined,
+  deliveryDate: undefined,
+  packRequirement: undefined, 
+  remark: undefined,
   processOptions: [], // 级联多选结果
-  materialList: [], ctpList: [], processList: [], outsourcingList: [], printList: []
+  productList: [],    // 新增：产品明细子表
+  materialList: [], 
+  ctpList: [], 
+  processList: [], 
+  outsourcingList: [], 
+  printList: []
 };
 
-const data = reactive<PageData<any, any>>({
+const data = reactive<any>({
   form: { ...initFormData },
-  queryParams: { pageNum: 1, pageSize: 10 },
+  queryParams: { pageNum: 1, pageSize: 10, workOrderNo: '', customerName: '', productName: '' },
   rules: {
-    customerId: [{ required: true, message: "客户必须选择", trigger: "change" }],
-    productName: [{ required: true, message: "产品名称不能为空", trigger: "blur" }]
+    customerId: [{ required: true, message: "客户必须选择", trigger: "change" }]
   }
 });
 const { queryParams, form, rules } = toRefs(data);
@@ -338,6 +367,43 @@ const handleCustomerChange = (val: any) => {
   if (selected) form.value.customerName = selected.companyName;
 };
 
+// ========================== 核心计算逻辑 ==========================
+
+// 计算单行产品总金额
+const calcProductTotal = (row: any) => {
+  if (row.produceQuantity && row.unitPrice) {
+    row.totalAmount = Number((row.produceQuantity * row.unitPrice).toFixed(2));
+  } else {
+    row.totalAmount = 0.00;
+  }
+};
+
+// 监听产品订单数量输入，如果没有填生产数量，则默认同步赋值
+const handleOrderQtyChange = (val: number, row: any) => {
+  if (val && !row.produceQuantity) {
+    row.produceQuantity = val;
+    calcProductTotal(row);
+  }
+};
+
+// 汇总产品列表的总订单数
+const totalOrderQty = computed(() => {
+  if (!form.value.productList) return 0;
+  return form.value.productList.reduce((sum: number, item: any) => sum + (item.orderQuantity || 0), 0);
+});
+
+// 汇总产品列表的总生产数
+const totalProduceQty = computed(() => {
+  if (!form.value.productList) return 0;
+  return form.value.productList.reduce((sum: number, item: any) => sum + (item.produceQuantity || 0), 0);
+});
+
+// 提取所有的产品名称 (用逗号拼接)
+const combinedProductNames = computed(() => {
+  if (!form.value.productList) return '';
+  return form.value.productList.map((p: any) => p.productName).filter(Boolean).join(',');
+});
+
 // 解析长宽
 const parseSize = (sizeStr: string, type: 'L' | 'W') => {
   if (!sizeStr) return 0;
@@ -346,7 +412,7 @@ const parseSize = (sizeStr: string, type: 'L' | 'W') => {
   return 0;
 };
 
-// 智能算价公式
+// 智能算价公式 (委外表)
 const calcTotalPrice = (row: any) => {
   if (!row.unitPrice || !row.goodQty) { row.totalPrice = 0; return; }
   if (row.priceMethod === '平方米' && row.length && row.width) {
@@ -375,14 +441,9 @@ const getFilteredSuppliers = (processArray: string[]) => {
   });
 };
 
-// 监听订单数量自动计算纸张
-watch(() => form.value.orderQuantity, (newVal) => {
-  if (!newVal) return;
-  
-  if(!form.value.produceQuantity) {
-     form.value.produceQuantity = newVal;
-  }
-
+// 监听汇总的订单数量，自动计算纸张（只在初次填写触发）
+watch(() => totalOrderQty.value, (newVal) => {
+  if (!newVal || newVal === 0) return;
   if (form.value.materialList.length === 0) {
     let extraFace = Math.floor((newVal - 1) / 66);
     let faceQty = newVal + 101 + extraFace;
@@ -393,7 +454,7 @@ watch(() => form.value.orderQuantity, (newVal) => {
     form.value.materialList.push({ partName: '面纸', sourceType: '自来', requireQty: faceQty });
     form.value.materialList.push({ partName: '坑纸', sourceType: '自来', requireQty: pitQty });
     
-    proxy?.$modal.msgSuccess("已自动推算纸张数量！");
+    proxy?.$modal.msgSuccess("已根据总订单数量自动推算纸张数量！");
   }
 });
 
@@ -401,8 +462,8 @@ watch(() => form.value.orderQuantity, (newVal) => {
 watch(() => form.value.processOptions, (newVal) => {
   if (!newVal) return;
   const newSigs = newVal.map((path: string[]) => path.join(' - '));
-  form.value.processList = form.value.processList.filter(row => newSigs.includes(row.processName));
-  const oldSigs = form.value.processList.map(row => row.processName);
+  form.value.processList = form.value.processList.filter((row: any) => newSigs.includes(row.processName));
+  const oldSigs = form.value.processList.map((row: any) => row.processName);
   newVal.forEach((path: string[]) => {
     const sig = path.join(' - ');
     if (!oldSigs.includes(sig)) {
@@ -413,20 +474,20 @@ watch(() => form.value.processOptions, (newVal) => {
 
 // 一键转委外逻辑
 const handleToOutsourcing = (processRow: any) => {
-  const exists = form.value.outsourcingList.find(item => item.processProject === processRow.processName);
+  const exists = form.value.outsourcingList.find((item: any) => item.processProject === processRow.processName);
   if (exists) { proxy?.$modal.msgWarning(`【${processRow.processName}】已转过委外！`); return; }
 
   const firstMat = form.value.materialList.length > 0 ? form.value.materialList[0] : null;
 
   form.value.outsourcingList.push({
-    productName: form.value.productName,
+    productName: combinedProductNames.value, // 使用拼装后的所有产品名称
     materialName: firstMat ? firstMat.paperName : '',
     length: firstMat ? parseSize(firstMat.paperSize, 'L') : 0,
     width: firstMat ? parseSize(firstMat.paperSize, 'W') : 0,
     materialQty: firstMat ? firstMat.requireQty : 0,
     processProjectArray: processRow.processPath, 
     processProject: processRow.processName, 
-    goodQty: form.value.produceQuantity,
+    goodQty: totalProduceQty.value, // 使用拼装后的总生产数量
     priceMethod: '平方米', 
     unitPrice: undefined,
     totalPrice: 0,
@@ -435,6 +496,14 @@ const handleToOutsourcing = (processRow: any) => {
   proxy?.$modal.msgSuccess(`转委外成功！已自动智能匹配供应商，请填写加工单价。`);
 };
 
+// ========================== 基础表格增删查改 ==========================
+
+const addProductLine = () => {
+  form.value.productList.push({
+    productName: '', customerPo: '', customerMaterialNo: '', spec: '', layers: '', knifePlateNo: '',
+    orderQuantity: undefined, produceQuantity: undefined, unit: '个', unitPrice: undefined, totalAmount: 0.00
+  });
+};
 const addLine = (listName: string) => { form.value[listName].push({}); };
 const removeLine = (listName: string, index: number) => { form.value[listName].splice(index, 1); };
 
@@ -445,34 +514,49 @@ const getList = async () => {
   total.value = res.total;
   loading.value = false;
 };
-const cancel = () => { form.value = { ...initFormData }; dialog.visible = false; };
+const cancel = () => { form.value = JSON.parse(JSON.stringify(initFormData)); dialog.visible = false; };
 const handleQuery = () => { queryParams.value.pageNum = 1; getList(); };
 const resetQuery = () => { queryFormRef.value?.resetFields(); handleQuery(); };
 
 const handleAdd = () => {
-  form.value = { ...initFormData };
-  form.value.processOptions = []; form.value.materialList = []; form.value.ctpList = []; form.value.printList = []; form.value.processList = []; form.value.outsourcingList = [];
-  dialog.visible = true; dialog.title = "新建生产工单";
+  form.value = JSON.parse(JSON.stringify(initFormData));
+  // 默认添加一行空的产品数据以便于用户填写
+  addProductLine();
+  dialog.visible = true; 
+  dialog.title = "新建生产工单";
 };
 
 const handleUpdate = async (row?: any) => {
-  form.value = { ...initFormData };
+  form.value = JSON.parse(JSON.stringify(initFormData));
   const res = await getWorkOrder(row.id);
   Object.assign(form.value, res.data);
-  ['materialList', 'ctpList', 'printList', 'processList', 'outsourcingList'].forEach(key => { if(!form.value[key]) form.value[key] = []; });
+  ['productList', 'materialList', 'ctpList', 'printList', 'processList', 'outsourcingList'].forEach(key => { if(!form.value[key]) form.value[key] = []; });
   
   if(form.value.processList && form.value.processList.length > 0){
-      form.value.processOptions = form.value.processList.map(item => item.processPath || item.processName.split(' - '));
+      form.value.processOptions = form.value.processList.map((item: any) => item.processPath || item.processName.split(' - '));
   }
   
-  dialog.visible = true; dialog.title = "修改生产工单";
+  dialog.visible = true; 
+  dialog.title = "修改生产工单";
 };
 
 const submitForm = () => {
   workOrderFormRef.value?.validate(async (valid: boolean) => {
     if (valid) {
+      // 业务自定义校验：产品明细不能为空，且名称必填
+      if (!form.value.productList || form.value.productList.length === 0) {
+        proxy?.$modal.msgError("请至少添加一项产品明细");
+        return;
+      }
+      for (let i = 0; i < form.value.productList.length; i++) {
+        if (!form.value.productList[i].productName) {
+          proxy?.$modal.msgError(`产品明细第 ${i + 1} 行的产品名称不能为空`);
+          return;
+        }
+      }
+
       buttonLoading.value = true;
-      form.value.outsourcingList.forEach(item => {
+      form.value.outsourcingList.forEach((item: any) => {
          if(Array.isArray(item.processProjectArray)) {
              item.processProject = item.processProjectArray.join(' - ');
          }
@@ -489,7 +573,7 @@ const submitForm = () => {
 };
 
 const handleDelete = async (row?: any) => {
-  await proxy?.$modal.confirm('确认删除？');
+  await proxy?.$modal.confirm('确认删除工单【' + row.workOrderNo + '】？');
   await delWorkOrder(row.id);
   proxy?.$modal.msgSuccess("删除成功");
   await getList();
