@@ -4,14 +4,11 @@
       <div v-show="showSearch" class="mb-[10px]">
         <el-card shadow="hover">
           <el-form ref="queryFormRef" :model="queryParams" :inline="true">
-            <!-- <el-form-item label="主键ID" prop="id">
-              <el-input v-model="queryParams.id" placeholder="请输入主键ID" clearable @keyup.enter="handleQuery" />
-            </el-form-item> -->
             <el-form-item label="专用码" prop="uniqueCode">
               <el-input v-model="queryParams.uniqueCode" placeholder="请输入专用码" clearable @keyup.enter="handleQuery" />
             </el-form-item>
             <el-form-item label="类型" prop="itemType">
-              <el-select v-model="queryParams.itemType" placeholder="请选择类型" clearable >
+              <el-select v-model="queryParams.itemType" placeholder="请选择类型" clearable style="width: 150px">
                 <el-option v-for="dict in erp_item_type" :key="dict.value" :label="dict.label" :value="dict.value"/>
               </el-select>
             </el-form-item>
@@ -21,45 +18,7 @@
             <el-form-item label="规格" prop="spec">
               <el-input v-model="queryParams.spec" placeholder="请输入规格" clearable @keyup.enter="handleQuery" />
             </el-form-item>
-            <!-- <el-form-item label="当前库存量" prop="currentQty">
-              <el-input v-model="queryParams.currentQty" placeholder="请输入当前库存量" clearable @keyup.enter="handleQuery" />
-            </el-form-item> -->
-            <!-- <el-form-item label="单位" prop="unit">
-              <el-select v-model="queryParams.unit" placeholder="请选择单位" clearable >
-                <el-option v-for="dict in erp_item_unit" :key="dict.value" :label="dict.label" :value="dict.value"/>
-              </el-select>
-            </el-form-item> -->
-            <!-- <el-form-item label="供应商ID" prop="supplierId">
-              <el-input v-model="queryParams.supplierId" placeholder="请输入供应商ID" clearable @keyup.enter="handleQuery" />
-            </el-form-item> -->
-            <!-- <el-form-item label="采购单价" prop="purchasePrice">
-              <el-input v-model="queryParams.purchasePrice" placeholder="请输入采购单价" clearable @keyup.enter="handleQuery" />
-            </el-form-item> -->
-            <!-- <el-form-item label="总金额" prop="totalAmount">
-              <el-input v-model="queryParams.totalAmount" placeholder="请输入总金额" clearable @keyup.enter="handleQuery" />
-            </el-form-item> -->
-            <el-form-item label="" prop="createBy">
-              <el-input v-model="queryParams.createBy" placeholder="请输入" clearable @keyup.enter="handleQuery" />
-            </el-form-item>
-            <el-form-item label="" prop="createTime">
-              <el-date-picker clearable
-                v-model="queryParams.createTime"
-                type="date"
-                value-format="YYYY-MM-DD"
-                placeholder="请选择"
-              />
-            </el-form-item>
-            <el-form-item label="" prop="updateBy">
-              <el-input v-model="queryParams.updateBy" placeholder="请输入" clearable @keyup.enter="handleQuery" />
-            </el-form-item>
-            <el-form-item label="" prop="updateTime">
-              <el-date-picker clearable
-                v-model="queryParams.updateTime"
-                type="date"
-                value-format="YYYY-MM-DD"
-                placeholder="请选择"
-              />
-            </el-form-item>
+            
             <el-form-item>
               <el-button type="primary" icon="Search" @click="handleQuery">搜索</el-button>
               <el-button icon="Refresh" @click="resetQuery">重置</el-button>
@@ -90,37 +49,31 @@
 
       <el-table v-loading="loading" border :data="inventoryList" @selection-change="handleSelectionChange">
         <el-table-column type="selection" width="55" align="center" />
-        <el-table-column label="主键ID" align="center" prop="id" v-if="true" />
-        <el-table-column label="专用码" align="center" prop="uniqueCode" />
-        <el-table-column label="类型" align="center" prop="itemType">
+        <el-table-column label="专用码" align="center" prop="uniqueCode" width="120" />
+        <el-table-column label="类型" align="center" prop="itemType" width="100">
           <template #default="scope">
             <dict-tag :options="erp_item_type" :value="scope.row.itemType"/>
           </template>
         </el-table-column>
-        <el-table-column label="物料名称" align="center" prop="itemName" />
-        <el-table-column label="规格" align="center" prop="spec" />
-        <el-table-column label="当前库存量" align="center" prop="currentQty" />
+        <el-table-column label="物料名称" align="center" prop="itemName" min-width="150" :show-overflow-tooltip="true" />
+        <el-table-column label="规格" align="center" prop="spec" min-width="120" />
+        <el-table-column label="库存量" align="center" prop="currentQty" />
         <el-table-column label="单位" align="center" prop="unit">
           <template #default="scope">
             <dict-tag :options="erp_item_unit" :value="scope.row.unit"/>
           </template>
         </el-table-column>
-        <el-table-column label="供应商ID" align="center" prop="supplierId" />
+        
+        <el-table-column label="供应商" align="center" prop="supplierId" min-width="150" :show-overflow-tooltip="true">
+          <template #default="scope">
+             <span>{{ supplierOptions.find(opt => opt.id === scope.row.supplierId)?.companyName || scope.row.supplierId }}</span>
+          </template>
+        </el-table-column>
+        
         <el-table-column label="采购单价" align="center" prop="purchasePrice" />
         <el-table-column label="总金额" align="center" prop="totalAmount" />
-        <el-table-column label="" align="center" prop="createBy" />
-        <el-table-column label="" align="center" prop="createTime" width="180">
-          <template #default="scope">
-            <span>{{ parseTime(scope.row.createTime, '{y}-{m}-{d}') }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="" align="center" prop="updateBy" />
-        <el-table-column label="" align="center" prop="updateTime" width="180">
-          <template #default="scope">
-            <span>{{ parseTime(scope.row.updateTime, '{y}-{m}-{d}') }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="操作" align="center" fixed="right"  class-name="small-padding fixed-width">
+        
+        <el-table-column label="操作" align="center" fixed="right" width="150" class-name="small-padding fixed-width">
           <template #default="scope">
             <el-tooltip content="修改" placement="top">
               <el-button link type="primary" icon="Edit" @click="handleUpdate(scope.row)" v-hasPermi="['erp:inventory:edit']"></el-button>
@@ -134,47 +87,71 @@
 
       <pagination v-show="total > 0" :total="total" v-model:page="queryParams.pageNum" v-model:limit="queryParams.pageSize" @pagination="getList" />
     </el-card>
-    <!-- 添加或修改库存管理对话框 -->
-    <el-dialog :title="dialog.title" v-model="dialog.visible" width="500px" append-to-body>
-      <el-form ref="inventoryFormRef" :model="form" :rules="rules" label-width="80px">
-        <el-form-item label="专用码" prop="uniqueCode">
-          <el-input v-model="form.uniqueCode" placeholder="请输入专用码" />
-        </el-form-item>
-        <el-form-item label="类型" prop="itemType">
-          <el-select v-model="form.itemType" placeholder="请选择类型">
-            <el-option
-                v-for="dict in erp_item_type"
-                :key="dict.value"
-                :label="dict.label"
-                :value="dict.value"
-            ></el-option>
-          </el-select>
-        </el-form-item>
-        <el-form-item label="物料名称" prop="itemName">
-          <el-input v-model="form.itemName" placeholder="请输入物料名称" />
-        </el-form-item>
-        <el-form-item label="规格" prop="spec">
-          <el-input v-model="form.spec" placeholder="请输入规格" />
-        </el-form-item>
-        <el-form-item label="当前库存量" prop="currentQty">
-          <el-input v-model="form.currentQty" placeholder="请输入当前库存量" />
-        </el-form-item>
-        <el-form-item label="单位" prop="unit">
-          <el-select v-model="form.unit" placeholder="请选择单位">
-            <el-option
-                v-for="dict in erp_item_unit"
-                :key="dict.value"
-                :label="dict.label"
-                :value="dict.value"
-            ></el-option>
-          </el-select>
-        </el-form-item>
-        <el-form-item label="供应商ID" prop="supplierId">
-          <el-input v-model="form.supplierId" placeholder="请输入供应商ID" />
-        </el-form-item>
-        <el-form-item label="采购单价" prop="purchasePrice">
-          <el-input v-model="form.purchasePrice" placeholder="请输入采购单价" />
-        </el-form-item>
+
+    <el-dialog :title="dialog.title" v-model="dialog.visible" width="600px" append-to-body>
+      <el-form ref="inventoryFormRef" :model="form" :rules="rules" label-width="100px">
+        <el-row :gutter="20">
+            <el-col :span="12">
+                <el-form-item label="专用码" prop="uniqueCode">
+                  <el-input v-model="form.uniqueCode" placeholder="请输入专用码" />
+                </el-form-item>
+            </el-col>
+            <el-col :span="12">
+                <el-form-item label="类型" prop="itemType">
+                  <el-select v-model="form.itemType" placeholder="请选择类型" style="width: 100%">
+                    <el-option v-for="dict in erp_item_type" :key="dict.value" :label="dict.label" :value="dict.value"></el-option>
+                  </el-select>
+                </el-form-item>
+            </el-col>
+            <el-col :span="24">
+                <el-form-item label="物料名称" prop="itemName">
+                  <el-input v-model="form.itemName" placeholder="请输入物料名称" />
+                </el-form-item>
+            </el-col>
+            <el-col :span="12">
+                <el-form-item label="规格" prop="spec">
+                  <el-input v-model="form.spec" placeholder="请输入规格" />
+                </el-form-item>
+            </el-col>
+            <el-col :span="12">
+                <el-form-item label="单位" prop="unit">
+                  <el-select v-model="form.unit" placeholder="请选择" style="width: 100%">
+                    <el-option v-for="dict in erp_item_unit" :key="dict.value" :label="dict.label" :value="dict.value"></el-option>
+                  </el-select>
+                </el-form-item>
+            </el-col>
+            
+            <el-divider content-position="left">库存与财务</el-divider>
+            
+            <el-col :span="24">
+                <el-form-item label="供应商" prop="supplierId">
+                  <el-select v-model="form.supplierId" placeholder="请选择供应商" style="width: 100%" filterable clearable>
+                    <el-option
+                        v-for="item in supplierOptions"
+                        :key="item.id"
+                        :label="item.companyName"
+                        :value="item.id"
+                    />
+                  </el-select>
+                </el-form-item>
+            </el-col>
+            
+            <el-col :span="12">
+                <el-form-item label="当前库存" prop="currentQty">
+                  <el-input-number v-model="form.currentQty" :min="0" :precision="2" style="width: 100%" @change="calculateTotal"/>
+                </el-form-item>
+            </el-col>
+            <el-col :span="12">
+                <el-form-item label="采购单价" prop="purchasePrice">
+                  <el-input-number v-model="form.purchasePrice" :min="0" :precision="4" style="width: 100%" @change="calculateTotal"/>
+                </el-form-item>
+            </el-col>
+            <el-col :span="12">
+                <el-form-item label="总金额" prop="totalAmount">
+                  <el-input-number v-model="form.totalAmount" :min="0" :precision="2" style="width: 100%" disabled />
+                </el-form-item>
+            </el-col>
+        </el-row>
       </el-form>
       <template #footer>
         <div class="dialog-footer">
@@ -189,6 +166,8 @@
 <script setup name="Inventory" lang="ts">
 import { listInventory, getInventory, delInventory, addInventory, updateInventory } from '@/api/erp/inventory';
 import { InventoryVO, InventoryQuery, InventoryForm } from '@/api/erp/inventory/types';
+// 1. 引入客户查询接口
+import { listCustomer } from '@/api/erp/customer';
 
 const { proxy } = getCurrentInstance() as ComponentInternalInstance;
 const { erp_item_type, erp_item_unit } = toRefs<any>(proxy?.useDict('erp_item_type', 'erp_item_unit'));
@@ -201,6 +180,9 @@ const ids = ref<Array<string | number>>([]);
 const single = ref(true);
 const multiple = ref(true);
 const total = ref(0);
+
+// 2. 供应商列表数据
+const supplierOptions = ref<any[]>([]);
 
 const queryFormRef = ref<ElFormInstance>();
 const inventoryFormRef = ref<ElFormInstance>();
@@ -219,26 +201,18 @@ const initFormData: InventoryForm = {
   unit: undefined,
   supplierId: undefined,
   purchasePrice: undefined,
+  totalAmount: undefined
 }
 const data = reactive<PageData<InventoryForm, InventoryQuery>>({
   form: {...initFormData},
   queryParams: {
     pageNum: 1,
     pageSize: 10,
-    id: undefined,
     uniqueCode: undefined,
     itemType: undefined,
     itemName: undefined,
     spec: undefined,
-    currentQty: undefined,
-    unit: undefined,
-    supplierId: undefined,
-    purchasePrice: undefined,
-    totalAmount: undefined,
-    createBy: undefined,
-    createTime: undefined,
-    updateBy: undefined,
-    updateTime: undefined,
+    // 删除了其他不必要的查询参数
     params: {
     }
   },
@@ -253,6 +227,21 @@ const data = reactive<PageData<InventoryForm, InventoryQuery>>({
 });
 
 const { queryParams, form, rules } = toRefs(data);
+
+/** 3. 获取供应商列表 */
+const getSupplierList = async () => {
+  // 假设 customerType '2' 代表供应商，根据实际字典值调整
+  // pageSize 设置大一些以获取所有供应商
+  const res = await listCustomer({ pageNum: 1, pageSize: 1000, customerType: '2' });
+  supplierOptions.value = res.rows;
+}
+
+/** 4. 自动计算总金额 */
+const calculateTotal = () => {
+    if (form.value.currentQty && form.value.purchasePrice) {
+        form.value.totalAmount = Number((form.value.currentQty * form.value.purchasePrice).toFixed(2));
+    }
+}
 
 /** 查询库存管理列表 */
 const getList = async () => {
@@ -316,7 +305,8 @@ const submitForm = () => {
   inventoryFormRef.value?.validate(async (valid: boolean) => {
     if (valid) {
       buttonLoading.value = true;
-      if (form.value.id) {
+      // 解决TS id 类型检查问题
+      if ((form.value as any).id) {
         await updateInventory(form.value).finally(() =>  buttonLoading.value = false);
       } else {
         await addInventory(form.value).finally(() =>  buttonLoading.value = false);
@@ -346,5 +336,6 @@ const handleExport = () => {
 
 onMounted(() => {
   getList();
+  getSupplierList(); // 页面加载时获取供应商数据
 });
 </script>

@@ -73,6 +73,13 @@ public class BizCustomerVo implements Serializable {
     private String customerType;
 
     /**
+     * 供应商分类
+     */
+    @ExcelProperty(value = "供应商分类", converter = ExcelDictConvert.class)
+    @ExcelDictFormat(dictType = "erp_supplier_category") // 加上这个，导出时自动变中文
+    private String supplierCategory;
+
+    /**
      * 公司所在省
      */
     @ExcelProperty(value = "公司所在省")

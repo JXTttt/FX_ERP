@@ -129,6 +129,11 @@ public class BizCustomer extends BaseEntity {
     private String remark;
 
     /**
+     * 供应商分类(1=面纸,2=模切... 逗号分隔)
+     */
+    private String supplierCategory;
+
+    /**
      * 删除标志（0代表存在 2代表删除）
      */
     @TableLogic

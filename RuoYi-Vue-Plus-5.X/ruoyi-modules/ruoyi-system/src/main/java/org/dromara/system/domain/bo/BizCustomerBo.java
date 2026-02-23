@@ -130,6 +130,11 @@ public class BizCustomerBo extends BaseEntity {
     private Long salesManId;
 
     /**
+     * 供应商分类(1=面纸,2=模切... 逗号分隔)
+     */
+    private String supplierCategory;
+
+    /**
      * 备注
      */
     private String remark;

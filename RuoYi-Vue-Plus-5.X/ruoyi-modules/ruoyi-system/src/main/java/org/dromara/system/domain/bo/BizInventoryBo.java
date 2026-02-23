@@ -21,10 +21,6 @@ import java.math.BigDecimal;
 @AutoMapper(target = BizInventory.class, reverseConvertGenerate = false)
 public class BizInventoryBo extends BaseEntity {
 
-    /**
-     * 主键ID
-     * 修正：将 $Group 修改为 EditGroup.class
-     */
     @NotNull(message = "主键ID不能为空", groups = { EditGroup.class })
     private Long id;
 

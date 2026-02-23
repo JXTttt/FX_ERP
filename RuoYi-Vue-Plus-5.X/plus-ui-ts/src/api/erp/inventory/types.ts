@@ -112,7 +112,8 @@ export interface InventoryForm extends BaseEntity {
    * 采购单价
    */
   purchasePrice?: number;
-
+  totalAmount?: number;
+  remark?: string;
 }
 
 export interface InventoryQuery extends PageQuery {

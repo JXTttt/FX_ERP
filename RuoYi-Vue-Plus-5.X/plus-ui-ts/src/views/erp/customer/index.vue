@@ -118,6 +118,15 @@
           </template>
         </el-table-column>
 
+        <el-table-column label="供应分类" align="center" prop="supplierCategory" min-width="120">
+          <template #default="scope">
+            <dict-tag 
+              :options="erp_supplier_category" 
+              :value="scope.row.supplierCategory ? scope.row.supplierCategory.split(',') : []" 
+            />
+          </template>
+        </el-table-column>
+
         <el-table-column
           label="公司地址"
           align="center"
@@ -277,6 +286,26 @@
               </el-select>
             </el-form-item>
           </el-col>
+
+          <el-col :span="12" v-if="form.customerType === '2'">
+            <el-form-item label="供应分类" prop="supplierCategory">
+              <el-select 
+                v-model="form.supplierCategory" 
+                multiple 
+                placeholder="请选择供应商分类" 
+                style="width: 100%"
+                clearable
+              >
+                <el-option
+                  v-for="dict in erp_supplier_category"
+                  :key="dict.value"
+                  :label="dict.label"
+                  :value="dict.value"
+                />
+              </el-select>
+            </el-form-item>
+          </el-col>
+
           <el-col :span="12">
             <el-form-item label="联系人" prop="contactPerson">
               <el-input v-model="form.contactPerson" placeholder="请输入首要联系人" />
@@ -379,11 +408,11 @@ import {
   updateCustomer,
 } from "@/api/erp/customer";
 import { CustomerVO, CustomerQuery, CustomerForm } from "@/api/erp/customer/types";
-// 引入省市区数据（汉字版）
 import { pcaTextArr } from "element-china-area-data";
 
 const { proxy } = getCurrentInstance() as ComponentInternalInstance;
-const { erp_customer_type } = toRefs<any>(proxy?.useDict("erp_customer_type"));
+// 🔥 新增引入 erp_supplier_category 字典
+const { erp_customer_type, erp_supplier_category } = toRefs<any>(proxy?.useDict("erp_customer_type", "erp_supplier_category"));
 
 const customerList = ref<CustomerVO[]>([]);
 const buttonLoading = ref(false);
@@ -393,10 +422,8 @@ const ids = ref<Array<string | number>>([]);
 const single = ref(true);
 const multiple = ref(true);
 const total = ref(0);
-// 新增：控制是否为查看模式
 const isView = ref(false);
 
-// 新增：绑定级联选择器的数组变量
 const companyRegion = ref<string[]>([]); 
 const deliveryRegion = ref<string[]>([]); 
 
@@ -408,13 +435,15 @@ const dialog = reactive<DialogOption>({
   title: "",
 });
 
-const initFormData: CustomerForm = {
+// 🔥 改用 any 以兼容我们手动新增的 supplierCategory 字段
+const initFormData: any = {
   companyName: undefined,
   customerCode: undefined,
   shortName: undefined,
   contactPerson: undefined,
   contactPhone: undefined,
   customerType: undefined,
+  supplierCategory: [], // 初始化为空数组
   companyProvince: undefined,
   companyCity: undefined,
   companyDistrict: undefined,
@@ -428,7 +457,8 @@ const initFormData: CustomerForm = {
   salesManId: undefined,
   remark: undefined,
 };
-const data = reactive<PageData<CustomerForm, CustomerQuery>>({
+
+const data = reactive<PageData<any, CustomerQuery>>({
   form: { ...initFormData },
   queryParams: {
     pageNum: 1,
@@ -462,14 +492,11 @@ const data = reactive<PageData<CustomerForm, CustomerQuery>>({
   rules: {
     companyName: [{ required: true, message: "客户公司全称不能为空", trigger: "blur" }],
     customerCode: [{ required: true, message: "客户编码不能为空", trigger: "blur" }],
-    // 可以加一个规则：如果选了省市区，必填
-    // companyProvince: [{ required: true, message: "请选择所在地区", trigger: "change" }],
   },
 });
 
 const { queryParams, form, rules } = toRefs(data);
 
-/** 监听公司地址级联选择器变化 */
 const handleCompanyRegionChange = (value: string[]) => {
   if (value && value.length > 0) {
     form.value.companyProvince = value[0];
@@ -482,7 +509,6 @@ const handleCompanyRegionChange = (value: string[]) => {
   }
 }
 
-/** 监听收货地址级联选择器变化 */
 const handleDeliveryRegionChange = (value: string[]) => {
   if (value && value.length > 0) {
     form.value.deliveryProvince = value[0];
@@ -495,7 +521,6 @@ const handleDeliveryRegionChange = (value: string[]) => {
   }
 }
 
-/** 查询客户及供应商列表 */
 const getList = async () => {
   loading.value = true;
   const res = await listCustomer(queryParams.value);
@@ -504,41 +529,34 @@ const getList = async () => {
   loading.value = false;
 };
 
-/** 取消按钮 */
 const cancel = () => {
   reset();
   dialog.visible = false;
 };
 
-/** 表单重置 */
 const reset = () => {
   form.value = { ...initFormData };
   customerFormRef.value?.resetFields();
-  // 重置时清空级联选择器
   companyRegion.value = [];
   deliveryRegion.value = [];
 };
 
-/** 搜索按钮操作 */
 const handleQuery = () => {
   queryParams.value.pageNum = 1;
   getList();
 };
 
-/** 重置按钮操作 */
 const resetQuery = () => {
   queryFormRef.value?.resetFields();
   handleQuery();
 };
 
-/** 多选框选中数据 */
 const handleSelectionChange = (selection: CustomerVO[]) => {
   ids.value = selection.map((item) => item.id);
   single.value = selection.length != 1;
   multiple.value = !selection.length;
 };
 
-/** 新增按钮操作 */
 const handleAdd = () => {
   reset();
   isView.value = false;
@@ -548,7 +566,6 @@ const handleAdd = () => {
   dialog.title = "添加客户及供应商";
 };
 
-/** 修改按钮操作 */
 const handleUpdate = async (row?: CustomerVO) => {
   reset();
   isView.value = false;
@@ -556,14 +573,19 @@ const handleUpdate = async (row?: CustomerVO) => {
   const res = await getCustomer(_id);
   Object.assign(form.value, res.data);
   
-  // 回显公司地址
+  // 🔥 字符串转数组 (例如 "1,2" -> ['1', '2'])
+  if (form.value.supplierCategory && typeof form.value.supplierCategory === 'string') {
+    form.value.supplierCategory = form.value.supplierCategory.split(',');
+  } else {
+    form.value.supplierCategory = [];
+  }
+  
   if (form.value.companyProvince && form.value.companyCity && form.value.companyDistrict) {
     companyRegion.value = [form.value.companyProvince, form.value.companyCity, form.value.companyDistrict];
   } else {
     companyRegion.value = [];
   }
 
-  // 回显收货地址
   if (form.value.deliveryProvince && form.value.deliveryCity && form.value.deliveryDistrict) {
     deliveryRegion.value = [form.value.deliveryProvince, form.value.deliveryCity, form.value.deliveryDistrict];
   } else {
@@ -574,7 +596,6 @@ const handleUpdate = async (row?: CustomerVO) => {
   dialog.title = "修改客户及供应商";
 };
 
-/** 详情按钮操作 */
 const handleView = async (row?: CustomerVO) => {
   reset();
   isView.value = true;
@@ -582,11 +603,16 @@ const handleView = async (row?: CustomerVO) => {
   const res = await getCustomer(_id);
   Object.assign(form.value, res.data);
 
-  // 回显公司地址
+  // 🔥 查看时同样需要转换格式
+  if (form.value.supplierCategory && typeof form.value.supplierCategory === 'string') {
+    form.value.supplierCategory = form.value.supplierCategory.split(',');
+  } else {
+    form.value.supplierCategory = [];
+  }
+
   if (form.value.companyProvince && form.value.companyCity && form.value.companyDistrict) {
     companyRegion.value = [form.value.companyProvince, form.value.companyCity, form.value.companyDistrict];
   }
-  // 回显收货地址
   if (form.value.deliveryProvince && form.value.deliveryCity && form.value.deliveryDistrict) {
     deliveryRegion.value = [form.value.deliveryProvince, form.value.deliveryCity, form.value.deliveryDistrict];
   }
@@ -595,15 +621,21 @@ const handleView = async (row?: CustomerVO) => {
   dialog.title = "客户详情";
 };
 
-/** 提交按钮 */
 const submitForm = () => {
   customerFormRef.value?.validate(async (valid: boolean) => {
     if (valid) {
       buttonLoading.value = true;
-      if ((form.value as any).id) {
-        await updateCustomer(form.value).finally(() => (buttonLoading.value = false));
+      
+      // 🔥 提交前将数组转换为逗号分隔的字符串
+      const submitData = { ...form.value };
+      if (Array.isArray(submitData.supplierCategory)) {
+          submitData.supplierCategory = submitData.supplierCategory.join(',');
+      }
+
+      if (submitData.id) {
+        await updateCustomer(submitData).finally(() => (buttonLoading.value = false));
       } else {
-        await addCustomer(form.value).finally(() => (buttonLoading.value = false));
+        await addCustomer(submitData).finally(() => (buttonLoading.value = false));
       }
       proxy?.$modal.msgSuccess("操作成功");
       dialog.visible = false;
@@ -612,7 +644,6 @@ const submitForm = () => {
   });
 };
 
-/** 删除按钮操作 */
 const handleDelete = async (row?: CustomerVO) => {
   const _ids = row?.id || ids.value;
   await proxy?.$modal
@@ -623,7 +654,6 @@ const handleDelete = async (row?: CustomerVO) => {
   await getList();
 };
 
-/** 导出按钮操作 */
 const handleExport = () => {
   proxy?.download(
     "erp/customer/export",
