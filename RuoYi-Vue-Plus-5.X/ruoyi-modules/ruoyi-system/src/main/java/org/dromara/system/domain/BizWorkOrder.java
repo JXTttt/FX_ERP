@@ -48,12 +48,12 @@ public class BizWorkOrder extends BaseEntity {
     /**
      * 客户PO号
      */
-    private String customerPo;
+    //private String customerPo;
 
     /**
      * 客户物料号
      */
-    private String customerMaterialNo;
+    //private String customerMaterialNo;
 
     /**
      * 产品名称
@@ -63,52 +63,52 @@ public class BizWorkOrder extends BaseEntity {
     /**
      * 产品编码(拼音+日期)
      */
-    private String productCode;
+    //private String productCode;
 
     /**
      * 订单数量
      */
-    private Long orderQuantity;
+    //private Long orderQuantity;
 
     /**
      * 生产数量
      */
-    private Long produceQuantity;
+    //private Long produceQuantity;
 
     /**
      * 单位
      */
-    private String unit;
+    //private String unit;
 
     /**
      * 单价
      */
-    private BigDecimal unitPrice;
+    //private BigDecimal unitPrice;
 
     /**
      * 总金额
      */
-    private BigDecimal totalAmount;
+    //private BigDecimal totalAmount;
 
     /**
      * 规格
      */
-    private String spec;
+    //private String spec;
 
     /**
      * 层数(单E, BB等)
      */
-    private String layers;
+    //private String layers;
 
     /**
      * 刀版号
      */
-    private String knifePlateNo;
+    //private String knifePlateNo;
 
     /**
      * 结构类型
      */
-    private String structureType;
+    //private String structureType;
 
     /**
      * 开单日期
@@ -156,7 +156,7 @@ public class BizWorkOrder extends BaseEntity {
     private String remark;
 
     /**
-     * 
+     *
      */
     @TableLogic
     private String delFlag;

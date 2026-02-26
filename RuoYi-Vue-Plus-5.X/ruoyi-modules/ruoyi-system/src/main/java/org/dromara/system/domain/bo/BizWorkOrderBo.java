@@ -48,68 +48,68 @@ public class BizWorkOrderBo extends BaseEntity {
     /**
      * 客户PO号
      */
-    private String customerPo;
+    //private String customerPo;
 
     /**
      * 客户物料号
      */
-    private String customerMaterialNo;
+//    private String customerMaterialNo;
 
     /**
      * 产品名称
      */
-    @NotBlank(message = "产品名称不能为空", groups = { AddGroup.class, EditGroup.class })
+    //@NotBlank(message = "产品名称不能为空", groups = { AddGroup.class, EditGroup.class })
     private String productName;
 
     /**
      * 产品编码(拼音+日期)
      */
-    private String productCode;
+//    private String productCode;
 
     /**
      * 订单数量
      */
-    private Long orderQuantity;
-
-    /**
-     * 生产数量
-     */
-    private Long produceQuantity;
-
-    /**
-     * 单位
-     */
-    private String unit;
-
-    /**
-     * 单价
-     */
-    private BigDecimal unitPrice;
+//    private Long orderQuantity;
+//
+//    /**
+//     * 生产数量
+//     */
+//    private Long produceQuantity;
+//
+//    /**
+//     * 单位
+//     */
+//    private String unit;
+//
+//    /**
+//     * 单价
+//     */
+//    private BigDecimal unitPrice;
 
     /**
      * 总金额
      */
-    private BigDecimal totalAmount;
-
-    /**
-     * 规格
-     */
-    private String spec;
-
-    /**
-     * 层数(单E, BB等)
-     */
-    private String layers;
-
-    /**
-     * 刀版号
-     */
-    private String knifePlateNo;
-
-    /**
-     * 结构类型
-     */
-    private String structureType;
+//    private BigDecimal totalAmount;
+//
+//    /**
+//     * 规格
+//     */
+//    private String spec;
+//
+//    /**
+//     * 层数(单E, BB等)
+//     */
+//    private String layers;
+//
+//    /**
+//     * 刀版号
+//     */
+//    private String knifePlateNo;
+//
+//    /**
+//     * 结构类型
+//     */
+//    private String structureType;
 
     /**
      * 开单日期
@@ -180,4 +180,13 @@ public class BizWorkOrderBo extends BaseEntity {
      */
     private List<BizWoProductBo> productList;
 
+    /**
+     * 生产工艺子表列表
+     */
+    private List<BizWoProcessBo> processList;
+
+    /**
+     * 委外加工子表列表
+     */
+    private List<BizWoOutsourcingBo> outsourcingList;
 }

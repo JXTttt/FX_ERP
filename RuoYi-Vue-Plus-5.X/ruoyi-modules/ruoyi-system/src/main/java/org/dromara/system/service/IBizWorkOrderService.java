@@ -65,4 +65,9 @@ public interface IBizWorkOrderService {
      * @return 是否删除成功
      */
     Boolean deleteWithValidByIds(Collection<Long> ids, Boolean isValid);
+
+    /**
+     * 审核工单
+     */
+    Boolean auditWorkOrder(BizWorkOrderBo bo);
 }

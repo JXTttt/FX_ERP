@@ -102,4 +102,14 @@ public class BizWorkOrderController extends BaseController {
                           @PathVariable Long[] ids) {
         return toAjax(bizWorkOrderService.deleteWithValidByIds(List.of(ids), true));
     }
+
+    /**
+     * 审核工单 (只有拥有 erp:workOrder:audit 权限的人才能看到和调用)
+     */
+    @SaCheckPermission("erp:workOrder:audit")
+    @Log(title = "工单管理-审批", businessType = BusinessType.UPDATE)
+    @PutMapping("/audit")
+    public R<Void> audit(@RequestBody BizWorkOrderBo bo) {
+        return toAjax(bizWorkOrderService.auditWorkOrder(bo));
+    }
 }

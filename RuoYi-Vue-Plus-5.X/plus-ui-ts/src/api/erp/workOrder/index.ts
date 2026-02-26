@@ -61,3 +61,12 @@ export const delWorkOrder = (id: string | number | Array<string | number>) => {
     method: 'delete'
   });
 };
+
+// 审核工单
+export const auditWorkOrder = (data: any) => {
+  return request({
+    url: '/erp/workOrder/audit',
+    method: 'put',
+    data: data
+  });
+};

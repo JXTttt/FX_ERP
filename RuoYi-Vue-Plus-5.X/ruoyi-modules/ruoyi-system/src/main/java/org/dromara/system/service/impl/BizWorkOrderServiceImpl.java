@@ -22,6 +22,10 @@ import org.dromara.system.domain.bo.BizWorkOrderBo;
 import org.dromara.system.domain.vo.BizWorkOrderVo;
 import org.dromara.system.mapper.BizWorkOrderMapper;
 import org.dromara.system.service.IBizWorkOrderService;
+import org.dromara.system.domain.BizWoProcess;
+import org.dromara.system.domain.BizWoOutsourcing;
+import org.dromara.system.mapper.BizWoProcessMapper;
+import org.dromara.system.mapper.BizWoOutsourcingMapper;
 
 // 引入子表实体
 import org.dromara.system.domain.BizWoProduct;
@@ -64,6 +68,8 @@ public class BizWorkOrderServiceImpl implements IBizWorkOrderService {
     private final BizWoPrintMapper printMapper;
     private final BizWoPostProcessMapper postProcessMapper;
     private final BizWoExtraPurchaseMapper extraPurchaseMapper;
+    private final BizWoProcessMapper processMapper;
+    private final BizWoOutsourcingMapper outsourcingMapper;
 
     // 注入 WarmFlow 流程实例服务
 //    private final InsService insService;
@@ -78,6 +84,8 @@ public class BizWorkOrderServiceImpl implements IBizWorkOrderService {
             vo.setPrintList(printMapper.selectVoList(new LambdaQueryWrapper<BizWoPrint>().eq(BizWoPrint::getWorkOrderId, id)));
             vo.setPostProcessList(postProcessMapper.selectVoList(new LambdaQueryWrapper<BizWoPostProcess>().eq(BizWoPostProcess::getWorkOrderId, id)));
             vo.setExtraPurchaseList(extraPurchaseMapper.selectVoList(new LambdaQueryWrapper<BizWoExtraPurchase>().eq(BizWoExtraPurchase::getWorkOrderId, id)));
+            vo.setProcessList(processMapper.selectVoList(new LambdaQueryWrapper<BizWoProcess>().eq(BizWoProcess::getWorkOrderId, id)));
+            vo.setOutsourcingList(outsourcingMapper.selectVoList(new LambdaQueryWrapper<BizWoOutsourcing>().eq(BizWoOutsourcing::getWorkOrderId, id)));
         }
         return vo;
     }
@@ -121,7 +129,7 @@ public class BizWorkOrderServiceImpl implements IBizWorkOrderService {
         BizWorkOrder add = MapstructUtils.convert(bo, BizWorkOrder.class);
         validEntityBeforeSave(add);
 
-        // 设置初始审核状态为 "1-审批中"
+        // 👉 核心：新建工单状态默认为 "1-待审批"
         add.setAuditStatus("1");
 
         boolean flag = baseMapper.insert(add) > 0;
@@ -129,9 +137,7 @@ public class BizWorkOrderServiceImpl implements IBizWorkOrderService {
         if (flag) {
             bo.setId(add.getId());
             insertChildren(bo);
-
-            // 👇 重点在这里：系统模块不直接调用工作流API，而是发布一个广播（事件）
-            SpringUtils.context().publishEvent(new WorkOrderCreatedEvent(add.getId()));
+            // ❌ 彻底删除了发起工作流的代码，世界清静了！
         }
         return flag;
     }
@@ -199,6 +205,16 @@ public class BizWorkOrderServiceImpl implements IBizWorkOrderService {
             list.forEach(i -> { i.setWorkOrderId(woId); i.setId(null); });
             extraPurchaseMapper.insertBatch(list);
         }
+        if (bo.getProcessList() != null && !bo.getProcessList().isEmpty()) {
+            List<BizWoProcess> list = MapstructUtils.convert(bo.getProcessList(), BizWoProcess.class);
+            list.forEach(i -> { i.setWorkOrderId(woId); i.setId(null); });
+            processMapper.insertBatch(list);
+        }
+        if (bo.getOutsourcingList() != null && !bo.getOutsourcingList().isEmpty()) {
+            List<BizWoOutsourcing> list = MapstructUtils.convert(bo.getOutsourcingList(), BizWoOutsourcing.class);
+            list.forEach(i -> { i.setWorkOrderId(woId); i.setId(null); });
+            outsourcingMapper.insertBatch(list);
+        }
     }
 
     private void deleteChildren(Long woId) {
@@ -208,8 +224,22 @@ public class BizWorkOrderServiceImpl implements IBizWorkOrderService {
         printMapper.delete(new LambdaQueryWrapper<BizWoPrint>().eq(BizWoPrint::getWorkOrderId, woId));
         postProcessMapper.delete(new LambdaQueryWrapper<BizWoPostProcess>().eq(BizWoPostProcess::getWorkOrderId, woId));
         extraPurchaseMapper.delete(new LambdaQueryWrapper<BizWoExtraPurchase>().eq(BizWoExtraPurchase::getWorkOrderId, woId));
+        processMapper.delete(new LambdaQueryWrapper<BizWoProcess>().eq(BizWoProcess::getWorkOrderId, woId));
+        outsourcingMapper.delete(new LambdaQueryWrapper<BizWoOutsourcing>().eq(BizWoOutsourcing::getWorkOrderId, woId));
     }
 
     private void validEntityBeforeSave(BizWorkOrder entity){
+    }
+
+    @Override
+    public Boolean auditWorkOrder(BizWorkOrderBo bo) {
+        BizWorkOrder workOrder = new BizWorkOrder();
+        workOrder.setId(bo.getId());
+        // 2-已通过, 3-已驳回
+        workOrder.setAuditStatus(bo.getAuditStatus());
+        // 记录一下是谁审批的
+        workOrder.setAuditBy(org.dromara.common.satoken.utils.LoginHelper.getUsername());
+
+        return baseMapper.updateById(workOrder) > 0;
     }
 }
