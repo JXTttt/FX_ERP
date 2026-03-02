@@ -37,8 +37,8 @@
       <el-table v-loading="loading" border :data="workOrderList">
         <el-table-column type="index" width="55" align="center" label="序号" />
         <el-table-column label="工单编号" align="center" prop="workOrderNo" width="130" />
-        <el-table-column label="客户名称" align="center" prop="customerName" min-width="150" :show-overflow-tooltip="true" />
-        <el-table-column label="包含产品" align="center" prop="productName" min-width="180" :show-overflow-tooltip="true"/>
+        <el-table-column label="客户名称" align="center" prop="customerName" width="120" :show-overflow-tooltip="true" />
+        <el-table-column label="包含产品" align="center" prop="productName" min-width="120" :show-overflow-tooltip="true"/>
         <el-table-column label="审核状态" align="center" prop="auditStatus" width="100">
           <template #default="scope">
             <el-tag v-if="scope.row.auditStatus === '0'" type="info">未提交</el-tag>
@@ -52,13 +52,11 @@
             <span>{{ parseTime(scope.row.deliveryDate, '{y}-{m}-{d}') }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="操作" align="center" fixed="right" width="300">
+        <el-table-column label="操作" align="center" fixed="right" width="340">
           <template #default="scope">
             <el-button link type="success" icon="View" @click="handleView(scope.row)" v-hasPermi="['erp:workOrder:query']">查看</el-button>
-            <el-button link type="warning" icon="Download" @click="handleExportRow(scope.row)" v-hasPermi="['erp:workOrder:export']">导出</el-button>
-            
+            <el-button link type="warning" icon="Printer" @click="handlePrintOutsourcing(scope.row)" v-hasPermi="['erp:workOrder:query']">委外单</el-button>
             <el-button link type="primary" icon="Stamp" @click="handleAudit(scope.row)" v-if="scope.row.auditStatus === '1'" v-hasPermi="['erp:workOrder:audit']">审批</el-button>
-            
             <el-button link type="primary" icon="Edit" @click="handleUpdate(scope.row)" v-if="scope.row.auditStatus !== '2'" v-hasPermi="['erp:workOrder:edit']">修改</el-button>
             <el-button link type="danger" icon="Delete" @click="handleDelete(scope.row)" v-if="scope.row.auditStatus !== '2'" v-hasPermi="['erp:workOrder:remove']">删除</el-button>
           </template>
@@ -72,29 +70,16 @@
         
         <el-divider content-position="left">基础业务信息</el-divider>
         <el-row :gutter="20">
-          <el-col :span="8">
+          <el-col :span="12">
             <el-form-item label="选择客户" prop="customerId">
               <el-select v-model="form.customerId" placeholder="请选择客户(必填)" filterable style="width: 100%" @change="handleCustomerChange">
                 <el-option v-for="item in customerOptions" :key="String(item.id)" :label="item.companyName" :value="String(item.id)" />
               </el-select>
             </el-form-item>
           </el-col>
-          <el-col :span="8">
+          <el-col :span="12">
             <el-form-item label="交货日期" prop="deliveryDate">
               <el-date-picker clearable v-model="form.deliveryDate" type="date" value-format="YYYY-MM-DD" placeholder="请选择交货日期" style="width: 100%" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="8">
-            <el-form-item label="生产工艺" prop="processOptions">
-              <el-cascader
-                v-model="form.processOptions"
-                :options="processTreeData"
-                :props="{ multiple: true, emitPath: true }"
-                clearable
-                filterable
-                placeholder="请选择所需工艺(支持多级多选)"
-                style="width: 100%"
-              />
             </el-form-item>
           </el-col>
         </el-row>
@@ -191,18 +176,32 @@
           </el-tab-pane>
 
           <el-tab-pane label="生产工艺明细">
+            <div class="mb-2" v-if="!isView">
+              <el-button type="primary" plain icon="Plus" size="small" @click="addLine('processList')">添加工艺</el-button>
+            </div>
             <el-table :data="form.processList" border size="small">
-              <el-table-column label="工序名称" width="200">
+              <el-table-column label="工序名称" width="280">
                 <template #default="scope">
-                  <el-tag type="info" size="large">{{ scope.row.processName }}</el-tag>
+                  <el-select
+                    v-if="!isView"
+                    v-model="scope.row.processName"
+                    filterable allow-create default-first-option
+                    placeholder="选择标准工艺或自行输入" style="width: 100%"
+                  >
+                    <el-option-group v-for="group in processTreeData" :key="group.value" :label="group.label">
+                      <el-option v-for="item in group.children" :key="item.value" :label="item.label" :value="group.value + ' - ' + item.value" />
+                    </el-option-group>
+                  </el-select>
+                  <span v-else>{{ scope.row.processName }}</span>
                 </template>
               </el-table-column>
               <el-table-column label="工艺要求/备注" min-width="200">
                 <template #default="scope"><el-input v-model="scope.row.remark" placeholder="请输入具体要求" /></template>
               </el-table-column>
-              <el-table-column label="操作" width="150" align="center" v-if="!isView">
+              <el-table-column label="操作" width="180" align="center" v-if="!isView">
                 <template #default="scope">
-                  <el-button type="primary" link icon="Position" @click="handleToOutsourcing(scope.row)">一键转委外单</el-button>
+                  <el-button type="primary" link icon="Position" @click="handleToOutsourcing(scope.row)">一键转委外</el-button>
+                  <el-button type="danger" link icon="Delete" @click="removeLine('processList', scope.$index)">移除</el-button>
                 </template>
               </el-table-column>
             </el-table>
@@ -216,7 +215,10 @@
               <el-table-column label="印刷方式" width="150">
                 <template #default="scope">
                   <el-select v-model="scope.row.printType" allow-create filterable>
-                    <el-option label="单面" value="单面" /><el-option label="正反" value="正反" /><el-option label="自反" value="自反" /><el-option label="天地反" value="天地反" />
+                    <el-option label="单面" value="单面" />
+                    <el-option label="正反" value="正反" />
+                    <el-option label="自反" value="自反" />
+                    <el-option label="天地反" value="天地反" />
                   </el-select>
                 </template>
               </el-table-column>
@@ -235,16 +237,26 @@
               <el-table-column label="宽(mm)" width="100"><template #default="scope"><el-input-number v-model="scope.row.width" :controls="false" style="width: 100%" @change="calcTotalPrice(scope.row)"/></template></el-table-column>
               <el-table-column label="材料数量" width="110"><template #default="scope"><el-input-number v-model="scope.row.materialQty" :controls="false" style="width: 100%" /></template></el-table-column>
               
-              <el-table-column label="加工工序" width="150">
+              <el-table-column label="加工工序" width="200">
                 <template #default="scope">
-                  <el-cascader v-model="scope.row.processProjectArray" :options="processTreeData" :props="{ emitPath: true }" clearable style="width: 100%" />
+                  <el-select
+                    v-if="!isView"
+                    v-model="scope.row.processProject"
+                    filterable allow-create default-first-option
+                    placeholder="选择或输入加工工序" style="width: 100%"
+                  >
+                    <el-option-group v-for="group in processTreeData" :key="group.value" :label="group.label">
+                      <el-option v-for="item in group.children" :key="item.value" :label="item.label" :value="group.value + ' - ' + item.value" />
+                    </el-option-group>
+                  </el-select>
+                  <span v-else>{{ scope.row.processProject }}</span>
                 </template>
               </el-table-column>
               
               <el-table-column label="加工商" width="160">
                 <template #default="scope">
                   <el-select v-model="scope.row.supplierId" placeholder="智能匹配" filterable>
-                    <el-option v-for="item in getFilteredSuppliers(scope.row.processProjectArray)" :key="String(item.id)" :label="item.companyName" :value="String(item.id)" />
+                    <el-option v-for="item in getFilteredSuppliers(scope.row.processProject)" :key="String(item.id)" :label="item.companyName" :value="String(item.id)" />
                   </el-select>
                 </template>
               </el-table-column>
@@ -259,7 +271,6 @@
               </el-table-column>
               <el-table-column label="加工单价" width="100"><template #default="scope"><el-input-number v-model="scope.row.unitPrice" :min="0" :precision="4" :controls="false" style="width: 100%" @change="calcTotalPrice(scope.row)"/></template></el-table-column>
               <el-table-column label="加工金额" width="100"><template #default="scope"><el-input-number v-model="scope.row.totalPrice" :min="0" :precision="2" :controls="false" style="width: 100%" disabled/></template></el-table-column>
-              
               <el-table-column label="交货期" width="140"><template #default="scope"><el-date-picker v-model="scope.row.deliveryDate" type="date" value-format="YYYY-MM-DD" style="width: 100%" /></template></el-table-column>
               <el-table-column label="备注" min-width="150"><template #default="scope"><el-input v-model="scope.row.remark" /></template></el-table-column>
               <el-table-column label="操作" width="70" align="center" fixed="right" v-if="!isView"><template #default="scope"><el-button link type="danger" @click="removeLine('outsourcingList', scope.$index)">移除</el-button></template></el-table-column>
@@ -306,6 +317,98 @@
       </template>
     </el-dialog>
 
+    <el-dialog title="委外加工单预览与下载" v-model="printDialog.visible" width="1150px" append-to-body>
+      <div id="printArea" class="print-wrapper">
+        <div class="print-page" v-for="(group, index) in printData.groups" :key="index">
+          <div class="print-header">
+            <h1>中山市梵熙创意纸品有限公司——委外加工单</h1>
+          </div>
+          <table class="print-table" :id="'excelTable_' + index">
+            <colgroup>
+              <col width="45">  <col width="200"> <col width="150"> <col width="45">  <col width="20">  <col width="45">  <col width="70">  <col width="60">  <col width="100"> <col width="80">  <col width="80">  <col width="60">  <col width="80">  <col width="80">  <col width="150"> </colgroup>
+            <tbody>
+              <tr class="info-row">
+                <td colspan="7" class="left-align"><strong>加工商名称/联系人及电话：</strong>{{ group.supplierName }}</td>
+                <td colspan="6" class="left-align"><strong>委托方联系人：</strong>谭生/18823054545  廖小姐/15015007628</td>
+                <td colspan="1" class="grey-bg center-align font-bold">下单日期</td>
+                <td colspan="1" class="center-align">{{ printData.orderDate }}</td>
+              </tr>
+              <tr class="info-row">
+                <td colspan="7" class="left-align"><strong>加工商地址：</strong>{{ group.supplierAddress || '详见系统' }}</td>
+                <td colspan="6" class="left-align"><strong>委托方地址：</strong>中山市小榄镇西区社区太乐路23号5栋3楼</td>
+                <td colspan="1" class="grey-bg center-align font-bold">加工单号</td>
+                <td colspan="1" class="center-align">{{ printData.workOrderNo }}</td>
+              </tr>
+              
+              <tr class="list-header grey-bg center-align font-bold">
+                <td>序号</td>
+                <td>产品名称</td>
+                <td>材料名称</td>
+                <td>长</td>
+                <td></td>
+                <td>宽</td>
+                <td>材料数量</td>
+                <td>计算单位</td>
+                <td>加工工序</td>
+                <td>需生产<br>良品数量</td>
+                <td>计算方式</td>
+                <td>单价</td>
+                <td>加工金额</td>
+                <td>交货期</td>
+                <td>备注</td>
+              </tr>
+
+              <tr class="center-align" v-for="(item, i) in group.items" :key="i">
+                <td>{{ i + 1 }}</td>
+                <td>{{ item.productName }}</td>
+                <td>{{ item.materialName }}</td>
+                <td>{{ item.length }}</td>
+                <td>*</td>
+                <td>{{ item.width }}</td>
+                <td>{{ item.materialQty }}</td>
+                <td>张</td>
+                <td>{{ item.processProject }}</td>
+                <td>{{ item.goodQty }}</td>
+                <td>{{ item.priceMethod }}</td>
+                <td>{{ item.unitPrice }}</td>
+                <td>{{ item.totalPrice }}</td>
+                <td>{{ item.deliveryDate }}</td>
+                <td>{{ item.remark }}</td>
+              </tr>
+
+              <tr class="total-row">
+                <td colspan="3" class="center-align font-bold">合计 (人民币大写)</td>
+                <td colspan="7" class="center-align font-bold text-lg">{{ digitUppercase(group.totalAmount) }}</td>
+                <td colspan="2" class="center-align font-bold">合计 (人民币小写)</td>
+                <td colspan="1" class="center-align font-bold">{{ group.totalAmount.toFixed(2) }}</td>
+                <td colspan="2"></td>
+              </tr>
+
+              <tr class="footer-row">
+                <td colspan="1" class="center-align font-bold">备注</td>
+                <td colspan="9" class="left-align memo-text">
+                  1、税/运方式：不含税，我司自提。<br>
+                  2、结算方式：月结30天。<br>
+                  3、请贵单位收到订单4小时内确认并回复交期，未及时回复视为默认。
+                </td>
+                <td colspan="5" class="signature-box left-align font-bold text-lg" style="vertical-align: top; padding-top: 10px;">
+                  加工商确认 (签名/盖章) ：
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      
+      <template #footer>
+        <div class="dialog-footer">
+          <el-button type="warning" icon="Download" @click="exportExcel">下 载 Excel</el-button>
+          <el-button type="success" icon="Printer" @click="doPrint">执 行 打 印</el-button>
+          <el-button @click="printDialog.visible = false">取 消</el-button>
+        </div>
+      </template>
+    </el-dialog>
+
   </div>
 </template>
 
@@ -336,7 +439,6 @@ const queryFormRef = ref<ElFormInstance>();
 const workOrderFormRef = ref<ElFormInstance>();
 const dialog = reactive<DialogOption>({ visible: false, title: '' });
 
-// 审批弹窗变量
 const auditDialog = reactive({ visible: false });
 const auditForm = ref({ id: undefined, auditStatus: '2' });
 
@@ -344,18 +446,12 @@ const processTreeData = [
   { 
     value: '表面处理', label: '表面处理', supplierCat: '2', 
     children: [ 
-      {value: '过哑胶', label: '过哑胶'}, 
-      {value: '过光胶', label: '过光胶'}, 
-      {value: '烫金', label: '烫金'}, 
-      {value: '击凸', label: '击凸'},
-      {value: '压凹', label: '压凹'}, 
-      {value: '压纹', label: '压纹'},
-      {value: 'UV', label: 'UV'},
-      {value: '覆膜', label: '覆膜'},
-      {value: '局部UV', label: '局部UV'},
-      {value: '哑油', label: '哑油'},
-      {value: '光油（普通）', label: '光油（普通）'},
-      {value: '高光油', label: '高光油'}
+      {value: '过哑胶', label: '过哑胶'}, {value: '过光胶', label: '过光胶'}, 
+      {value: '烫金', label: '烫金'}, {value: '击凸', label: '击凸'},
+      {value: '压凹', label: '压凹'}, {value: '压纹', label: '压纹'},
+      {value: 'UV', label: 'UV'}, {value: '覆膜', label: '覆膜'},
+      {value: '局部UV', label: '局部UV'}, {value: '哑油', label: '哑油'},
+      {value: '光油（普通）', label: '光油（普通）'}, {value: '高光油', label: '高光油'}
     ]
   },
   { 
@@ -380,7 +476,6 @@ const initFormData: any = {
   deliveryDate: undefined,
   packRequirement: undefined, 
   remark: undefined,
-  processOptions: [], 
   productList: [],    
   materialList: [], 
   ctpList: [], 
@@ -402,6 +497,7 @@ const getCustomerList = async () => {
   const res = await listCustomer({ pageNum: 1, pageSize: 1000 });
   customerOptions.value = res.rows;
 };
+
 const handleCustomerChange = (val: any) => {
   const selected = customerOptions.value.find(item => String(item.id) === String(val));
   if (selected) form.value.customerName = selected.companyName;
@@ -453,9 +549,9 @@ const calcTotalPrice = (row: any) => {
   }
 };
 
-const getFilteredSuppliers = (processArray: string[]) => {
-  if (!processArray || processArray.length === 0) return customerOptions.value.filter(c => c.customerType === '2');
-  const majorCategory = processArray[0];
+const getFilteredSuppliers = (processProject: string) => {
+  if (!processProject) return customerOptions.value.filter(c => c.customerType === '2');
+  const majorCategory = processProject.split(' - ')[0];
   const treeNode = processTreeData.find(item => item.value === majorCategory);
   if (!treeNode || !treeNode.supplierCat) return customerOptions.value.filter(c => c.customerType === '2');
   const reqCat = treeNode.supplierCat;
@@ -477,25 +573,14 @@ watch(() => totalOrderQty.value, (newVal) => {
 
     form.value.materialList.push({ partName: '面纸', sourceType: '自来', requireQty: faceQty });
     form.value.materialList.push({ partName: '坑纸', sourceType: '自来', requireQty: pitQty });
-    proxy?.$modal.msgSuccess("已根据总订单数量自动推算纸张数量！");
   }
 });
 
-watch(() => form.value.processOptions, (newVal) => {
-  if (isDataLoading.value) return; 
-  if (!newVal) return;
-  const newSigs = newVal.map((path: string[]) => path.join(' - '));
-  form.value.processList = form.value.processList.filter((row: any) => newSigs.includes(row.processName));
-  const oldSigs = form.value.processList.map((row: any) => row.processName);
-  newVal.forEach((path: string[]) => {
-    const sig = path.join(' - ');
-    if (!oldSigs.includes(sig)) {
-      form.value.processList.push({ processName: sig, processPath: path, remark: '' });
-    }
-  });
-}, { deep: true });
-
 const handleToOutsourcing = (processRow: any) => {
+  if (!processRow.processName) {
+    proxy?.$modal.msgWarning("请先选择或输入工序名称！");
+    return;
+  }
   const exists = form.value.outsourcingList.find((item: any) => item.processProject === processRow.processName);
   if (exists) { proxy?.$modal.msgWarning(`【${processRow.processName}】已转过委外！`); return; }
 
@@ -506,15 +591,14 @@ const handleToOutsourcing = (processRow: any) => {
     length: firstMat ? parseSize(firstMat.paperSize, 'L') : 0,
     width: firstMat ? parseSize(firstMat.paperSize, 'W') : 0,
     materialQty: firstMat ? firstMat.requireQty : 0,
-    processProjectArray: processRow.processPath, 
-    processProject: processRow.processName, 
+    processProject: processRow.processName,
     goodQty: totalProduceQty.value, 
     priceMethod: '平方米', 
     unitPrice: undefined,
     totalPrice: 0,
     remark: processRow.remark
   });
-  proxy?.$modal.msgSuccess(`转委外成功！已自动智能匹配供应商，请填写加工单价。`);
+  proxy?.$modal.msgSuccess(`转委外成功！已自动匹配供应商库，请填写加工单细节。`);
 };
 
 const addProductLine = () => {
@@ -559,18 +643,16 @@ const handleUpdate = async (row?: any) => {
   dialog.title = "修改生产工单";
 };
 
-// 打开审批弹窗
 const handleAudit = (row: any) => {
   auditForm.value = { id: row.id, auditStatus: '2' };
   auditDialog.visible = true;
 };
 
-// 提交审批结果
 const submitAudit = async () => {
   await auditWorkOrder(auditForm.value);
   proxy?.$modal.msgSuccess("审批操作成功");
   auditDialog.visible = false;
-  getList(); // 刷新列表
+  getList(); 
 };
 
 const loadFormData = async (id: number) => {
@@ -583,18 +665,10 @@ const loadFormData = async (id: number) => {
     if (form.value.customerId) {
       form.value.customerId = String(form.value.customerId);
     }
-
     ['productList', 'materialList', 'ctpList', 'printList', 'processList', 'outsourcingList'].forEach(key => { if(!form.value[key]) form.value[key] = []; });
     
-    if(form.value.processList && form.value.processList.length > 0){
-        form.value.processOptions = form.value.processList.map((item: any) => {
-           return item.processName ? item.processName.split(' - ') : [];
-        });
-    }
-
     if(form.value.outsourcingList && form.value.outsourcingList.length > 0){
         form.value.outsourcingList.forEach((item: any) => {
-           if (item.processProject) item.processProjectArray = item.processProject.split(' - ');
            if (item.supplierId) item.supplierId = String(item.supplierId);
         });
     }
@@ -626,14 +700,7 @@ const submitForm = () => {
           return;
         }
       }
-
       buttonLoading.value = true;
-      form.value.outsourcingList.forEach((item: any) => {
-         if(Array.isArray(item.processProjectArray)) {
-             item.processProject = item.processProjectArray.join(' - ');
-         }
-      });
-
       form.value.productName = combinedProductNames.value;
 
       if (form.value.id) await updateWorkOrder(form.value).finally(() => buttonLoading.value = false);
@@ -653,5 +720,178 @@ const handleDelete = async (row?: any) => {
   await getList();
 };
 
+// ==================== 打印/导出委外单专属逻辑 ====================
+const printDialog = reactive({ visible: false });
+const printData = ref({
+  workOrderNo: '', orderDate: '', groups: [] as any[]
+});
+
+const digitUppercase = (n: number) => {
+  const fraction = ['角', '分'];
+  const digit = ['零', '壹', '贰', '叁', '肆', '伍', '陆', '柒', '捌', '玖'];
+  const unit = [['元', '万', '亿'], ['', '拾', '佰', '仟']];
+  let head = n < 0 ? '欠' : '';
+  n = Math.abs(n);
+  let s = '';
+  for (let i = 0; i < fraction.length; i++) {
+    s += (digit[Math.floor(n * 10 * Math.pow(10, i)) % 10] + fraction[i]).replace(/零./, '');
+  }
+  s = s || '整';
+  n = Math.floor(n);
+  for (let i = 0; i < unit[0].length && n > 0; i++) {
+    let p = '';
+    for (let j = 0; j < unit[1].length && n > 0; j++) {
+      p = digit[n % 10] + unit[1][j] + p;
+      n = Math.floor(n / 10);
+    }
+    s = p.replace(/(零.)*零$/, '').replace(/^$/, '零') + unit[0][i] + s;
+  }
+  return head + s.replace(/(零.)*零元/, '元').replace(/(零.)+/g, '零').replace(/^整$/, '零元整');
+};
+
+const handlePrintOutsourcing = async (row: any) => {
+  const res = await getWorkOrder(row.id);
+  const woDetail = res.data;
+  
+  if (!woDetail.outsourcingList || woDetail.outsourcingList.length === 0) {
+    proxy?.$modal.msgWarning("该工单暂无委外加工数据");
+    return;
+  }
+
+  printData.value.workOrderNo = woDetail.workOrderNo;
+  printData.value.orderDate = proxy?.parseTime(woDetail.createTime, '{y}/{m}/{d}') || '';
+  
+  const groupsMap = new Map();
+  woDetail.outsourcingList.forEach((item: any) => {
+    const supplier = customerOptions.value.find(c => String(c.id) === String(item.supplierId));
+    const supplierName = supplier ? supplier.companyName : '未知加工商';
+    
+    if (!groupsMap.has(supplierName)) {
+      groupsMap.set(supplierName, { supplierName: supplierName, supplierAddress: supplier?.companyAddress, items: [], totalAmount: 0 });
+    }
+    const group = groupsMap.get(supplierName);
+    group.items.push(item);
+    group.totalAmount += (Number(item.totalPrice) || 0);
+  });
+
+  printData.value.groups = Array.from(groupsMap.values());
+  printDialog.visible = true;
+};
+
+// 👉 完美生成无错位的 Excel
+const exportExcel = () => {
+  const printContent = document.getElementById('printArea')?.innerHTML;
+  if (!printContent) return;
+  
+  // 注入专门针对 Excel 渲染的强制样式与 XML 头
+  const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+    <head>
+      <meta charset="UTF-8">
+      <style>
+        .print-table { width: 100%; border-collapse: collapse; font-family: "SimSun"; font-size: 12px; }
+        /* 强制 Excel 添加所有单元格黑边框，并垂直居中 */
+        .print-table td { border: 1px solid #000000; text-align: center; vertical-align: middle; }
+        .left-align { text-align: left !important; }
+        .font-bold { font-weight: bold; }
+        .grey-bg { background-color: #e8e8e8; }
+        .print-page { margin-bottom: 40px; }
+        /* 防止长数字变为科学计数法 */
+        .center-align { text-align: center; mso-number-format:"\\@"; }
+      </style>
+    </head>
+    <body>${printContent}</body>
+  </html>`;
+  
+  const blob = new Blob([html], { type: 'application/vnd.ms-excel' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `委外单_${printData.value.workOrderNo}.xls`; 
+  a.click();
+  URL.revokeObjectURL(url);
+};
+
+const doPrint = () => {
+  const printContent = document.getElementById('printArea')?.innerHTML;
+  if (!printContent) return;
+  const newWindow = window.open('', '_blank');
+  newWindow?.document.write(`
+    <html>
+      <head>
+        <title>打印委外加工单</title>
+        <style>
+          body { font-family: "SimSun", "Microsoft YaHei", sans-serif; padding: 20px; }
+          .print-page { page-break-after: always; margin-bottom: 50px; }
+          .print-header { text-align: center; margin-bottom: 10px; position: relative; }
+          .print-header h1 { margin: 0; font-size: 24px; padding-bottom: 10px;}
+          .print-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+          .print-table td, .print-table th { border: 1px solid #000; padding: 6px 4px; word-break: break-all; }
+          .grey-bg { background-color: #e8e8e8 !important; -webkit-print-color-adjust: exact; color-adjust: exact; }
+          .center-align { text-align: center; }
+          .left-align { text-align: left !important; }
+          .font-bold { font-weight: bold; }
+          .text-lg { font-size: 16px; }
+          .memo-text { line-height: 1.5; font-size: 11px; }
+        </style>
+      </head>
+      <body>${printContent}</body>
+    </html>
+  `);
+  newWindow?.document.close();
+  setTimeout(() => {
+    newWindow?.print();
+    newWindow?.close();
+  }, 200);
+};
+
 onMounted(() => { getList(); getCustomerList(); });
 </script>
+
+<style lang="scss" scoped>
+/* ================= 打印预览区样式 ================= */
+.print-wrapper {
+  background: #fff;
+  padding: 20px;
+  color: #000;
+  /* 👉 新增：允许横向滚动 */
+  overflow-x: auto; 
+  
+  .print-page {
+    margin-bottom: 40px;
+    border: 1px dashed #ccc;
+    padding: 20px;
+    /* 👉 新增：强制页面容器的最小宽度大于表格总列宽，这样就能触发外层滚动条而不挤压表格 */
+    min-width: 1280px; 
+  }
+
+  .print-header {
+    text-align: center;
+    margin-bottom: 15px;
+    h1 {
+      margin: 0;
+      font-size: 22px;
+      font-family: "SimSun", serif;
+      font-weight: bold;
+    }
+  }
+
+  .print-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+    table-layout: fixed; /* 强制基于 colgroup 分配宽度 */
+
+    td {
+      border: 1px solid #333;
+      padding: 6px 4px;
+    }
+
+    .grey-bg { background-color: #e8e8e8; }
+    .center-align { text-align: center; }
+    .left-align { text-align: left !important; }
+    .font-bold { font-weight: bold; }
+    .text-lg { font-size: 15px; }
+    .memo-text { line-height: 1.6; font-size: 11px; }
+  }
+}
+</style>

@@ -64,7 +64,7 @@
           </template>
         </el-table-column>
         
-        <el-table-column label="供应商" align="center" prop="supplierId" min-width="150" :show-overflow-tooltip="true">
+        <el-table-column label="供应商/客户" align="center" prop="supplierId" min-width="150" :show-overflow-tooltip="true">
           <template #default="scope">
              <span>{{ supplierOptions.find(opt => opt.id === scope.row.supplierId)?.companyName || scope.row.supplierId }}</span>
           </template>
@@ -124,8 +124,8 @@
             <el-divider content-position="left">库存与财务</el-divider>
             
             <el-col :span="24">
-                <el-form-item label="供应商" prop="supplierId">
-                  <el-select v-model="form.supplierId" placeholder="请选择供应商" style="width: 100%" filterable clearable>
+                <el-form-item label="供应商/客户" prop="supplierId">
+                  <el-select v-model="form.supplierId" placeholder="请选择供应商/客户" style="width: 100%" filterable clearable>
                     <el-option
                         v-for="item in supplierOptions"
                         :key="item.id"
