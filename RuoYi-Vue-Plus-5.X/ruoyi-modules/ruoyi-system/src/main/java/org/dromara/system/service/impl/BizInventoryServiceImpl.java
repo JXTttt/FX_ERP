@@ -152,4 +152,27 @@ public class BizInventoryServiceImpl implements IBizInventoryService {
         }
         return baseMapper.deleteByIds(ids) > 0;
     }
+
+    @Override
+    @org.springframework.transaction.annotation.Transactional(rollbackFor = Exception.class)
+    public Boolean outbound(Long id, java.math.BigDecimal outboundQty) {
+        org.dromara.system.domain.BizInventory inv = baseMapper.selectById(id);
+        if (inv == null) {
+            throw new org.dromara.common.core.exception.ServiceException("库存记录不存在！");
+        }
+        if (inv.getCurrentQty().compareTo(outboundQty) < 0) {
+            throw new org.dromara.common.core.exception.ServiceException("出货失败：出货数量(" + outboundQty + ")不能大于当前库存剩余量(" + inv.getCurrentQty() + ")！");
+        }
+
+        // 1. 扣减库存数量
+        java.math.BigDecimal newQty = inv.getCurrentQty().subtract(outboundQty);
+        inv.setCurrentQty(newQty);
+
+        // 2. 👉 新增：同步重新计算剩余库存的总金额
+        if (inv.getPurchasePrice() != null) {
+            inv.setTotalAmount(newQty.multiply(inv.getPurchasePrice()));
+        }
+
+        return baseMapper.updateById(inv) > 0;
+    }
 }

@@ -14,7 +14,7 @@
       </el-form-item>
       <el-form-item label="采购状态" prop="status">
         <el-select v-model="queryParams.status" placeholder="请选择状态" clearable style="width: 200px">
-          <el-option label="待审/待处理" value="0" />
+          <el-option label="待处理" value="0" />
           <el-option label="已批" value="1" />
           <el-option label="已验收" value="2" />
           <el-option label="已驳回" value="3" />
@@ -39,7 +39,7 @@
     <el-table v-loading="loading" :data="purchaseList" @selection-change="handleSelectionChange" border>
       <el-table-column type="selection" width="55" align="center" />
       <el-table-column label="采购单号" align="center" prop="purchaseNo" width="160" />
-      <el-table-column label="关联工单" align="center" prop="relatedWoNo" width="120" />
+      <el-table-column label="关联工单" align="center" prop="relatedWoNo" width="110" />
       <el-table-column label="供应商名称" align="center" prop="supplierId" min-width="150" show-overflow-tooltip>
         <template #default="scope">
           <span>{{ getSupplierName(scope.row.supplierId) }}</span>
@@ -47,9 +47,14 @@
       </el-table-column>
       <el-table-column label="采购内容" align="center" prop="itemName" min-width="120" show-overflow-tooltip />
       <el-table-column label="规格" align="center" prop="spec" width="100" show-overflow-tooltip />
-      <el-table-column label="采购数量" align="center" prop="applyQty" width="100">
+      <el-table-column label="采购量" align="center" prop="applyQty" width="80">
         <template #default="scope">
           <span style="color: #409EFF; font-weight: bold;">{{ scope.row.applyQty }}</span>
+        </template>
+      </el-table-column>
+      <el-table-column label="验收量" align="center" prop="receivedQty" width="80">
+        <template #default="scope">
+          <span style="color: #67C23A; font-weight: bold;">{{ scope.row.receivedQty || '--' }}</span>
         </template>
       </el-table-column>
       <el-table-column label="单价" align="center" prop="price" width="80" />
@@ -58,12 +63,7 @@
           <span v-if="scope.row.totalPrice" style="color: #F56C6C; font-weight: bold;">￥{{ scope.row.totalPrice }}</span>
         </template>
       </el-table-column>
-      <el-table-column label="交货期" align="center" prop="deliveryDate" width="110">
-        <template #default="scope">
-          <span>{{ parseTime(scope.row.deliveryDate, '{y}-{m}-{d}') }}</span>
-        </template>
-      </el-table-column>
-      <el-table-column label="状态" align="center" prop="status" width="100">
+      <el-table-column label="状态" align="center" prop="status" width="80">
         <template #default="scope">
           <el-tag v-if="scope.row.status === '0'" type="warning">待处理</el-tag>
           <el-tag v-else-if="scope.row.status === '1'" type="primary">已批</el-tag>
@@ -72,9 +72,11 @@
           <span v-else>--</span>
         </template>
       </el-table-column>
-      <el-table-column label="操作" align="center" class-name="small-padding fixed-width" width="150" fixed="right">
+      <el-table-column label="操作" align="center" class-name="small-padding fixed-width" width="180" fixed="right">
         <template #default="scope">
-          <el-button link type="primary" icon="Edit" @click="handleUpdate(scope.row)" v-hasPermi="['erp:purchase:edit']">处理/修改</el-button>
+          <el-button v-if="['0', '1'].includes(scope.row.status)" link type="success" icon="Check" @click="handleAccept(scope.row)" v-hasPermi="['erp:purchase:edit']">验收</el-button>
+          
+          <el-button v-if="scope.row.status !== '2'" link type="primary" icon="Edit" @click="handleUpdate(scope.row)" v-hasPermi="['erp:purchase:edit']">处理</el-button>
           <el-button link type="danger" icon="Delete" @click="handleDelete(scope.row)" v-hasPermi="['erp:purchase:remove']">删除</el-button>
         </template>
       </el-table-column>
@@ -116,7 +118,7 @@
           </el-col>
         </el-row>
 
-        <el-divider content-position="left">采购处理</el-divider>
+        <el-divider content-position="left">采购处理与审批</el-divider>
         <el-row>
           <el-col :span="24">
             <el-form-item label="选择供应商" prop="supplierId">
@@ -141,17 +143,15 @@
             </el-form-item>
           </el-col>
           <el-col :span="12">
-            <el-form-item label="当前状态" prop="status">
+            <el-form-item label="审批状态" prop="status">
               <el-select v-model="form.status" style="width: 100%">
                 <el-option label="待处理" value="0" />
-                <el-option label="已批" value="1" />
-                <el-option label="已验收" value="2" />
-                <el-option label="已驳回" value="3" />
-              </el-select>
+                <el-option label="已批 (同意采购)" value="1" />
+                <el-option label="驳回" value="3" />
+                </el-select>
             </el-form-item>
           </el-col>
         </el-row>
-
       </el-form>
       <template #footer>
         <div class="dialog-footer">
@@ -160,6 +160,40 @@
         </div>
       </template>
     </el-dialog>
+
+    <el-dialog title="采购验收与入库" v-model="acceptOpen" width="500px" append-to-body>
+      <el-form ref="acceptRef" :model="acceptForm" label-width="110px">
+        <el-alert title="确认验收后，货物将自动转入系统库存" type="success" :closable="false" style="margin-bottom: 20px;" />
+        <el-form-item label="采购单号">
+          <el-input v-model="acceptForm.purchaseNo" disabled />
+        </el-form-item>
+        <el-form-item label="物品名称">
+          <el-input v-model="acceptForm.itemName" disabled />
+        </el-form-item>
+        <el-form-item label="供应商">
+          <el-input :model-value="getSupplierName(acceptForm.supplierId)" disabled />
+        </el-form-item>
+        <el-form-item label="预计采购量">
+          <el-input-number v-model="acceptForm.applyQty" disabled style="width: 100%" />
+        </el-form-item>
+        <el-form-item label="最终单价" prop="price">
+          <el-input-number v-model="acceptForm.price" :precision="4" :step="0.1" :min="0" style="width: 100%" @change="calcAcceptTotal" />
+        </el-form-item>
+        <el-form-item label="实际收货量" prop="receivedQty">
+          <el-input-number v-model="acceptForm.receivedQty" :min="0" style="width: 100%" @change="calcAcceptTotal" />
+        </el-form-item>
+        <el-form-item label="入库总金额">
+          <el-input-number v-model="acceptForm.totalPrice" disabled :precision="2" style="width: 100%" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <div class="dialog-footer">
+          <el-button type="success" @click="submitAccept">确 认 入 库</el-button>
+          <el-button @click="acceptOpen = false">取 消</el-button>
+        </div>
+      </template>
+    </el-dialog>
+
   </div>
 </template>
 
@@ -181,8 +215,11 @@ const multiple = ref(true);
 const total = ref(0);
 const title = ref("");
 
-// 👉 新增：原生表单 Ref，替代 proxy.resetForm
 const purchaseRef = ref<any>(null);
+
+// 验收专属数据
+const acceptOpen = ref(false);
+const acceptForm = ref<any>({});
 
 const data = reactive({
   form: {
@@ -236,6 +273,12 @@ const calcTotal = () => {
   }
 };
 
+const calcAcceptTotal = () => {
+  if (acceptForm.value.price && acceptForm.value.receivedQty) {
+    acceptForm.value.totalPrice = Number((acceptForm.value.price * acceptForm.value.receivedQty).toFixed(2));
+  }
+}
+
 function getList() {
   loading.value = true;
   listPurchase(queryParams.value).then(response => {
@@ -250,7 +293,6 @@ function cancel() {
   reset();
 }
 
-// 👉 修复：使用原生写法清空表单，绝不报错
 function reset() {
   form.value = {
     id: undefined,
@@ -293,29 +335,54 @@ function handleSelectionChange(selection: any[]) {
 function handleAdd() {
   reset();
   open.value = true;
-  title.value = "添加手工采购单";
+  title.value = "添加手工单";
 }
 
-// 👉 修复：修改按钮操作
 function handleUpdate(row: any) {
-  console.log("当前点击的行数据：", row); // 让你在 F12 里能看到到底有没有拿到 ID
   reset();
-  
   const _id = row.id || ids.value[0];
-  if (!_id) {
-    proxy.$modal.msgError("无法获取记录ID，请检查后端是否正确返回了id字段！");
-    return;
-  }
-
   getPurchase(_id).then(response => {
     form.value = response.data as any;
     if (form.value.supplierId) {
       form.value.supplierId = String(form.value.supplierId);
     }
+    // 如果之前是已验收状态的数据被强行打开处理，为了防止下拉框报错，重置为已批
+    if (form.value.status === '2') {
+        form.value.status = '1'; 
+    }
     open.value = true;
     title.value = "处理采购单";
-  }).catch(err => {
-    console.error("获取详情失败:", err);
+  });
+}
+
+// 👉 新增：打开验收弹窗
+function handleAccept(row: any) {
+  // 把行数据拉取过来，实际收货量默认等于采购量
+  acceptForm.value = {
+    id: row.id,
+    purchaseNo: row.purchaseNo,
+    itemName: row.itemName,
+    supplierId: row.supplierId,
+    spec: row.spec,
+    applyQty: row.applyQty,
+    receivedQty: row.receivedQty && row.receivedQty > 0 ? row.receivedQty : row.applyQty,
+    price: row.price,
+    status: '2' // 直接锁定状态为：2-已验收
+  };
+  calcAcceptTotal(); // 算一下初始总价
+  acceptOpen.value = true;
+}
+
+// 👉 新增：提交验收
+function submitAccept() {
+  if (acceptForm.value.receivedQty == null || acceptForm.value.receivedQty <= 0) {
+    proxy.$modal.msgError("实际验收量必须大于0！");
+    return;
+  }
+  updatePurchase(acceptForm.value).then(() => {
+    proxy.$modal.msgSuccess("验收成功，物资已添加入库！");
+    acceptOpen.value = false;
+    getList();
   });
 }
 
@@ -324,7 +391,7 @@ function submitForm() {
     if (valid) {
       if (form.value.id != null) {
         updatePurchase(form.value).then(response => {
-          proxy.$modal.msgSuccess("修改成功");
+          proxy.$modal.msgSuccess("处理成功");
           open.value = false;
           getList();
         });

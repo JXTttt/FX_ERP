@@ -65,4 +65,6 @@ public interface IBizInventoryService {
      * @return 是否删除成功
      */
     Boolean deleteWithValidByIds(Collection<Long> ids, Boolean isValid);
+
+    Boolean outbound(Long id, java.math.BigDecimal outboundQty);
 }

@@ -26,6 +26,7 @@ import java.util.Collection;
  * @author JXTttt
  * @date 2026-03-02
  */
+@SuppressWarnings("SpringJavaInjectionPointsAutowiringInspection")
 @Slf4j
 @RequiredArgsConstructor
 @Service
@@ -33,24 +34,14 @@ public class BizPurchaseServiceImpl implements IBizPurchaseService {
 
     private final BizPurchaseMapper baseMapper;
 
-    /**
-     * 查询采购管理
-     *
-     * @param id 主键
-     * @return 采购管理
-     */
+    @SuppressWarnings("SpringJavaInjectionPointsAutowiringInspection")
+    private final org.dromara.system.mapper.BizInventoryMapper inventoryMapper;
+
     @Override
     public BizPurchaseVo queryById(Long id){
         return baseMapper.selectVoById(id);
     }
 
-    /**
-     * 分页查询采购管理列表
-     *
-     * @param bo        查询条件
-     * @param pageQuery 分页参数
-     * @return 采购管理分页列表
-     */
     @Override
     public TableDataInfo<BizPurchaseVo> queryPageList(BizPurchaseBo bo, PageQuery pageQuery) {
         LambdaQueryWrapper<BizPurchase> lqw = buildQueryWrapper(bo);
@@ -58,12 +49,6 @@ public class BizPurchaseServiceImpl implements IBizPurchaseService {
         return TableDataInfo.build(result);
     }
 
-    /**
-     * 查询符合条件的采购管理列表
-     *
-     * @param bo 查询条件
-     * @return 采购管理列表
-     */
     @Override
     public List<BizPurchaseVo> queryList(BizPurchaseBo bo) {
         LambdaQueryWrapper<BizPurchase> lqw = buildQueryWrapper(bo);
@@ -73,7 +58,6 @@ public class BizPurchaseServiceImpl implements IBizPurchaseService {
     private LambdaQueryWrapper<BizPurchase> buildQueryWrapper(BizPurchaseBo bo) {
         Map<String, Object> params = bo.getParams();
         LambdaQueryWrapper<BizPurchase> lqw = Wrappers.lambdaQuery();
-        lqw.orderByAsc(BizPurchase::getId);
         lqw.eq(StringUtils.isNotBlank(bo.getPurchaseNo()), BizPurchase::getPurchaseNo, bo.getPurchaseNo());
         lqw.eq(StringUtils.isNotBlank(bo.getRelatedWoNo()), BizPurchase::getRelatedWoNo, bo.getRelatedWoNo());
         lqw.eq(bo.getSupplierId() != null, BizPurchase::getSupplierId, bo.getSupplierId());
@@ -90,12 +74,6 @@ public class BizPurchaseServiceImpl implements IBizPurchaseService {
         return lqw;
     }
 
-    /**
-     * 新增采购管理
-     *
-     * @param bo 采购管理
-     * @return 是否新增成功
-     */
     @Override
     public Boolean insertByBo(BizPurchaseBo bo) {
         BizPurchase add = MapstructUtils.convert(bo, BizPurchase.class);
@@ -107,37 +85,76 @@ public class BizPurchaseServiceImpl implements IBizPurchaseService {
         return flag;
     }
 
-    /**
-     * 修改采购管理
-     *
-     * @param bo 采购管理
-     * @return 是否修改成功
-     */
     @Override
+    @org.springframework.transaction.annotation.Transactional(rollbackFor = Exception.class)
     public Boolean updateByBo(BizPurchaseBo bo) {
+        // 1. 先查出修改前的老数据
+        BizPurchase oldData = baseMapper.selectById(bo.getId());
+        if (oldData == null) return false;
+
         BizPurchase update = MapstructUtils.convert(bo, BizPurchase.class);
         validEntityBeforeSave(update);
-        return baseMapper.updateById(update) > 0;
+
+        boolean flag = baseMapper.updateById(update) > 0;
+
+        // 2. 状态机流转：如果状态【变成了已验收】，且之前【不是已验收】，则执行入库逻辑！
+        if (flag && "2".equals(bo.getStatus()) && !"2".equals(oldData.getStatus())) {
+            handleInventoryInbound(bo);
+        }
+
+        return flag;
     }
 
     /**
-     * 保存前的数据校验
+     * 自动转入库存逻辑
      */
+    private void handleInventoryInbound(BizPurchaseBo bo) {
+        // 根据物品名称和规格，在库存中寻找是否已有该材料
+        LambdaQueryWrapper<org.dromara.system.domain.BizInventory> lqw = new LambdaQueryWrapper<>();
+        lqw.eq(org.dromara.system.domain.BizInventory::getItemName, bo.getItemName());
+        if (StringUtils.isNotBlank(bo.getSpec())) {
+            lqw.eq(org.dromara.system.domain.BizInventory::getSpec, bo.getSpec());
+        }
+        lqw.last("limit 1");
+
+        org.dromara.system.domain.BizInventory inv = inventoryMapper.selectOne(lqw);
+
+        // 提取本次真实验收的数量
+        java.math.BigDecimal incomingQty = bo.getReceivedQty() != null ? bo.getReceivedQty() : bo.getApplyQty();
+
+        // 👉 安全提取单价：使用终极 String 转换法彻底断绝格式报错
+        java.math.BigDecimal safePrice = java.math.BigDecimal.ZERO;
+        if (bo.getPrice() != null) {
+            safePrice = new java.math.BigDecimal(String.valueOf(bo.getPrice()));
+        }
+
+        if (inv != null) {
+            // 如果仓库里已有该材料 -> 累加库存，并覆盖最新价格
+            inv.setCurrentQty(inv.getCurrentQty().add(incomingQty));
+            inv.setPurchasePrice(safePrice);
+            inv.setTotalAmount(inv.getCurrentQty().multiply(safePrice));
+            inventoryMapper.updateById(inv);
+        } else {
+            // 如果仓库里没有该材料 -> 新建一条库存记录
+            inv = new org.dromara.system.domain.BizInventory();
+            inv.setItemName(bo.getItemName());
+            inv.setSpec(bo.getSpec());
+            inv.setItemType("纸张"); // 默认归类为纸张原材料
+            inv.setCurrentQty(incomingQty);
+            inv.setUnit("张");
+            inv.setSupplierId(bo.getSupplierId());
+            inv.setPurchasePrice(safePrice);
+            inv.setTotalAmount(incomingQty.multiply(safePrice));
+            inventoryMapper.insert(inv);
+        }
+    }
+
     private void validEntityBeforeSave(BizPurchase entity){
-        //TODO 做一些数据校验,如唯一约束
     }
 
-    /**
-     * 校验并批量删除采购管理信息
-     *
-     * @param ids     待删除的主键集合
-     * @param isValid 是否进行有效性校验
-     * @return 是否删除成功
-     */
     @Override
     public Boolean deleteWithValidByIds(Collection<Long> ids, Boolean isValid) {
         if(isValid){
-            //TODO 做一些业务上的校验,判断是否需要校验
         }
         return baseMapper.deleteByIds(ids) > 0;
     }

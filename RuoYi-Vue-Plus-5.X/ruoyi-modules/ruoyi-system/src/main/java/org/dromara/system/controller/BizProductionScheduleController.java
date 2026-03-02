@@ -173,4 +173,13 @@ public class BizProductionScheduleController extends BaseController {
         rspData.setTotal(tableData.getTotal());
         return rspData;
     }
+
+    /**
+     * 排产完成并转入库存
+     */
+    @Log(title = "生产排产主", businessType = BusinessType.INSERT)
+    @PostMapping("/complete/{id}")
+    public R<Void> completeProduction(@PathVariable Long id) {
+        return toAjax(bizProductionScheduleService.completeProduction(id));
+    }
 }

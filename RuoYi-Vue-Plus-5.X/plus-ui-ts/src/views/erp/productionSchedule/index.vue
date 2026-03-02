@@ -138,6 +138,12 @@
           </el-table-column>
         </el-table-column>
 
+        <el-table-column label="操作" align="center" fixed="right" width="110">
+          <template #default="scope">
+            <el-button type="success" plain icon="Check" @click="handleComplete(scope.row)">完成入库</el-button>
+          </template>
+        </el-table-column>
+
       </el-table>
       <pagination v-show="total > 0" :total="total" v-model:page="queryParams.pageNum" v-model:limit="queryParams.pageSize" @pagination="getList" />
     </el-card>
@@ -177,7 +183,8 @@
 
 <script setup lang="ts" name="ScheduleMatrix">
 import { ref, reactive, onMounted, getCurrentInstance } from 'vue';
-import { listMatrix, updateScheduleNode } from '@/api/erp/schedule'; // 确认为你第一步新建的API路径
+import { listMatrix, updateScheduleNode } from '@/api/erp/schedule';
+import request from '@/utils/request'; // 👉 新增：引入 request 工具用于发送完成入库请求
 
 const { proxy } = getCurrentInstance() as any;
 
@@ -259,6 +266,19 @@ const submitNodeEdit = async () => {
   } finally {
     submitLoading.value = false;
   }
+};
+
+// 👉 新增：完成入库操作
+const handleComplete = (row: any) => {
+  proxy.$modal.confirm(`确认将【${row.itemName}】标记为生产完成，并移入成品库存吗？`).then(() => {
+    return request({
+      url: `/erp/productionSchedule/complete/${row.id}`,
+      method: 'post'
+    });
+  }).then(() => {
+    proxy.$modal.msgSuccess("该工单已完成生产并成功入库！");
+    getList(); // 刷新大表盘，完成的数据会自动消失
+  }).catch(() => {});
 };
 
 onMounted(() => {

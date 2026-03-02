@@ -117,7 +117,7 @@
           </el-table-column>
           <el-table-column label="订单数量" width="120">
             <template #default="scope">
-              <el-input-number v-model="scope.row.orderQuantity" :min="1" style="width: 100%" @change="(val) => handleOrderQtyChange(val, scope.row)" />
+              <el-input-number v-model="scope.row.orderQuantity" :min="1" style="width: 100%" @change="(val) => handleOrderQtyChange(val as number, scope.row)" />
             </template>
           </el-table-column>
           <el-table-column label="生产数量" width="120">
@@ -147,7 +147,15 @@
           <el-tab-pane label="材料清单">
             <div class="mb-2" v-if="!isView"><el-button type="primary" plain icon="Plus" size="small" @click="addLine('materialList')">添加材料</el-button></div>
             <el-table :data="form.materialList" border size="small">
-              <el-table-column label="部件" width="120"><template #default="scope"><el-input v-model="scope.row.partName" /></template></el-table-column>
+              
+              <el-table-column label="部件(必填)" width="140">
+                <template #default="scope">
+                  <el-select v-model="scope.row.partName" placeholder="纸张/配件" allow-create filterable default-first-option>
+                    <el-option v-for="dict in erp_item_type" :key="dict.value" :label="dict.label" :value="dict.label" />
+                  </el-select>
+                </template>
+              </el-table-column>
+
               <el-table-column label="来源" width="120">
                 <template #default="scope">
                   <el-select v-model="scope.row.sourceType" placeholder="来源">
@@ -155,10 +163,57 @@
                   </el-select>
                 </template>
               </el-table-column>
-              <el-table-column label="纸张名称" min-width="150"><template #default="scope"><el-input v-model="scope.row.paperName" placeholder="如:300克白卡"/></template></el-table-column>
-              <el-table-column label="纸张尺寸" width="150"><template #default="scope"><el-input v-model="scope.row.paperSize" placeholder="如:545*800" /></template></el-table-column>
-              <el-table-column label="数量(张)" width="120"><template #default="scope"><el-input-number v-model="scope.row.requireQty" :min="0" style="width: 100%" /></template></el-table-column>
-              <el-table-column label="切成" width="120"><template #default="scope"><el-input v-model="scope.row.cutMethod" /></template></el-table-column>
+              
+              <el-table-column label="物料名称(必填)" min-width="150">
+                <template #default="scope">
+                  <el-select
+                    v-model="scope.row.paperName"
+                    filterable
+                    allow-create
+                    default-first-option
+                    placeholder="选库存"
+                    style="width: 100%"
+                    @change="(val) => handleMaterialChange(val as string, scope.row)"
+                  >
+                    <el-option-group v-for="group in inventoryOptions" :key="group.label" :label="group.label">
+                      <el-option v-for="item in group.options" :key="item.id || item.itemName" :label="item.itemName" :value="item.itemName">
+                        <span style="float: left">{{ item.itemName }}</span>
+                        <span style="float: right; color: #8492a6; font-size: 12px">
+                          库存: <span style="color:#F56C6C;font-weight:bold;">{{ item.currentQty || 0 }}</span> | {{ item.spec || '无规格' }}
+                        </span>
+                      </el-option>
+                    </el-option-group>
+                  </el-select>
+                </template>
+              </el-table-column>
+
+              <el-table-column label="尺寸/规格" width="150">
+                <template #default="scope">
+                  <el-input 
+                    v-model="scope.row.paperSize" 
+                    placeholder="自动带出或手填" 
+                    :disabled="scope.row.sourceType === '本厂'"
+                  />
+                </template>
+              </el-table-column>
+
+              <el-table-column label="数量" width="160">
+                <template #default="scope">
+                  <el-input-number 
+                    v-model="scope.row.requireQty" 
+                    :min="0" 
+                    style="width: 100%" 
+                    @change="(val) => checkMaterialQty(val as number, scope.row)"
+                  />
+                </template>
+              </el-table-column>
+              
+              <el-table-column label="切成" width="160">
+                <template #default="scope">
+                  <el-input v-model="scope.row.cutMethod" />
+                </template>
+              </el-table-column>
+              
               <el-table-column label="操作" width="70" align="center" v-if="!isView"><template #default="scope"><el-button link type="danger" @click="removeLine('materialList', scope.$index)">移除</el-button></template></el-table-column>
             </el-table>
           </el-tab-pane>
@@ -359,7 +414,7 @@
               </tr>
 
               <tr class="center-align" v-for="(item, i) in group.items" :key="i">
-                <td>{{ i + 1 }}</td>
+                <td>{{ Number(i) + 1 }}</td>
                 <td>{{ item.productName }}</td>
                 <td>{{ item.materialName }}</td>
                 <td>{{ item.length }}</td>
@@ -415,8 +470,9 @@
 <script setup name="WorkOrder" lang="ts">
 import { listWorkOrder, getWorkOrder, delWorkOrder, addWorkOrder, updateWorkOrder, auditWorkOrder } from '@/api/erp/workOrder';
 import { listCustomer } from '@/api/erp/customer';
+import { listInventory } from '@/api/erp/inventory'; 
 import { ComponentInternalInstance, computed, onMounted, reactive, ref, toRefs, watch, getCurrentInstance, nextTick } from 'vue';
-import { ElForm } from 'element-plus';
+import { ElForm, ElMessage } from 'element-plus';
 
 type ElFormInstance = InstanceType<typeof ElForm>;
 
@@ -426,6 +482,8 @@ interface DialogOption {
 }
 
 const { proxy } = getCurrentInstance() as ComponentInternalInstance;
+const { erp_item_type } = toRefs<any>(proxy?.useDict('erp_item_type'));
+
 const workOrderList = ref([]);
 const buttonLoading = ref(false);
 const loading = ref(true);
@@ -435,6 +493,9 @@ const isView = ref(false);
 const isDataLoading = ref(false); 
 
 const customerOptions = ref<any[]>([]); 
+const inventoryOptions = ref<any[]>([]);
+const rawInventoryList = ref<any[]>([]);
+
 const queryFormRef = ref<ElFormInstance>();
 const workOrderFormRef = ref<ElFormInstance>();
 const dialog = reactive<DialogOption>({ visible: false, title: '' });
@@ -494,8 +555,74 @@ const data = reactive<any>({
 const { queryParams, form, rules } = toRefs(data);
 
 const getCustomerList = async () => {
-  const res = await listCustomer({ pageNum: 1, pageSize: 1000 });
+  const res = await listCustomer({ pageNum: 1, pageSize: 1000 } as any);
   customerOptions.value = res.rows;
+};
+
+const loadInventoryData = async () => {
+  try {
+    const res = await listInventory({ pageNum: 1, pageSize: 2000 } as any);
+    const list = res.rows || [];
+    rawInventoryList.value = list; 
+    
+    const groups: Record<string, any[]> = {};
+    list.forEach((item: any) => {
+      const dictItem = erp_item_type.value?.find((d: any) => String(d.value) === String(item.itemType) || String(d.label) === String(item.itemType));
+      const typeLabel = dictItem ? dictItem.label : (item.itemType || '其他');
+      
+      if (!groups[typeLabel]) {
+        groups[typeLabel] = [];
+      }
+      if (!groups[typeLabel].find(i => i.itemName === item.itemName && i.spec === item.spec)) {
+        groups[typeLabel].push(item);
+      }
+    });
+
+    inventoryOptions.value = Object.keys(groups).map(key => {
+      return { label: key, options: groups[key] };
+    });
+  } catch (e) {
+    console.error("加载库存数据失败", e);
+  }
+};
+
+const handleMaterialChange = (val: string, row: any) => {
+  if (row.sourceType === '本厂') {
+    const found = rawInventoryList.value.find(i => i.itemName === val);
+    if (found) {
+      row.paperSize = found.spec; 
+      if (row.requireQty && row.requireQty > Number(found.currentQty)) {
+        ElMessage.warning(`注意：当前【${val}】库存仅剩 ${found.currentQty}！`);
+      }
+    }
+  } else {
+    const found = rawInventoryList.value.find(i => i.itemName === val);
+    if (found && !row.paperSize) {
+      row.paperSize = found.spec;
+    }
+  }
+};
+
+// 👉 终极防御：全局库存累加超限拦截与动态回退
+const checkMaterialQty = (val: number, row: any) => {
+  if (row.sourceType === '本厂' && row.paperName) {
+    const found = rawInventoryList.value.find(i => i.itemName === row.paperName);
+    if (found) {
+      const maxQty = Number(found.currentQty || 0);
+
+      // 计算整个列表中，当前选中的“本厂”材料的【累计总需求量】
+      const totalRequested = form.value.materialList
+        .filter((m: any) => m.sourceType === '本厂' && m.paperName === row.paperName)
+        .reduce((sum: number, m: any) => sum + Number(m.requireQty || 0), 0);
+
+      if (totalRequested > maxQty) {
+        ElMessage.error(`库存不足预警！【${row.paperName}】当前总库存为 ${maxQty}，但列表中累计需求已达 ${totalRequested}！`);
+        // 强制回退当前单元格的数量，确保累计和刚好等于最大库存
+        const safeVal = Math.max(0, maxQty - (totalRequested - Number(val)));
+        row.requireQty = safeVal;
+      }
+    }
+  }
 };
 
 const handleCustomerChange = (val: any) => {
@@ -504,8 +631,10 @@ const handleCustomerChange = (val: any) => {
 };
 
 const calcProductTotal = (row: any) => {
-  if (row.produceQuantity && row.unitPrice) {
-    row.totalAmount = Number((row.produceQuantity * row.unitPrice).toFixed(2));
+  const pq = Number(row.produceQuantity || 0);
+  const up = Number(row.unitPrice || 0);
+  if (pq && up) {
+    row.totalAmount = Number((pq * up).toFixed(2));
   } else {
     row.totalAmount = 0.00;
   }
@@ -520,12 +649,12 @@ const handleOrderQtyChange = (val: number, row: any) => {
 
 const totalOrderQty = computed(() => {
   if (!form.value.productList) return 0;
-  return form.value.productList.reduce((sum: number, item: any) => sum + (item.orderQuantity || 0), 0);
+  return form.value.productList.reduce((sum: number, item: any) => sum + Number(item.orderQuantity || 0), 0);
 });
 
 const totalProduceQty = computed(() => {
   if (!form.value.productList) return 0;
-  return form.value.productList.reduce((sum: number, item: any) => sum + (item.produceQuantity || 0), 0);
+  return form.value.productList.reduce((sum: number, item: any) => sum + Number(item.produceQuantity || 0), 0);
 });
 
 const combinedProductNames = computed(() => {
@@ -541,11 +670,16 @@ const parseSize = (sizeStr: string, type: 'L' | 'W') => {
 };
 
 const calcTotalPrice = (row: any) => {
-  if (!row.unitPrice || !row.goodQty) { row.totalPrice = 0; return; }
+  const up = Number(row.unitPrice || 0);
+  const gq = Number(row.goodQty || 0);
+  if (!up || !gq) { row.totalPrice = 0; return; }
+  
   if (row.priceMethod === '平方米' && row.length && row.width) {
-    row.totalPrice = Number(((row.length * row.width / 1000000) * row.goodQty * row.unitPrice).toFixed(2));
+    const l = Number(row.length);
+    const w = Number(row.width);
+    row.totalPrice = Number(((l * w / 1000000) * gq * up).toFixed(2));
   } else {
-    row.totalPrice = Number((row.goodQty * row.unitPrice).toFixed(2));
+    row.totalPrice = Number((gq * up).toFixed(2));
   }
 };
 
@@ -564,12 +698,13 @@ const getFilteredSuppliers = (processProject: string) => {
 
 watch(() => totalOrderQty.value, (newVal) => {
   if (isDataLoading.value) return; 
-  if (!newVal || newVal === 0) return;
+  if (!newVal || Number(newVal) === 0) return;
   if (form.value.materialList.length === 0) {
-    let extraFace = Math.floor((newVal - 1) / 66);
-    let faceQty = newVal + 101 + extraFace;
-    let extraPit = Math.floor((newVal - 1) / 100);
-    let pitQty = newVal + 1 + extraPit;
+    const valNum = Number(newVal);
+    let extraFace = Math.floor((valNum - 1) / 66);
+    let faceQty = valNum + 101 + extraFace;
+    let extraPit = Math.floor((valNum - 1) / 100);
+    let pitQty = valNum + 1 + extraPit;
 
     form.value.materialList.push({ partName: '面纸', sourceType: '自来', requireQty: faceQty });
     form.value.materialList.push({ partName: '坑纸', sourceType: '自来', requireQty: pitQty });
@@ -629,6 +764,7 @@ const handleAdd = () => {
   dialog.title = "新建生产工单";
 };
 
+// 👉 修复查看数据时数组丢失的问题：安全合并不丢失响应式数组
 const handleView = async (row: any) => {
   isView.value = true; 
   await loadFormData(row.id);
@@ -655,17 +791,20 @@ const submitAudit = async () => {
   getList(); 
 };
 
+// 👉 优化：确保后端返回的数据结构完美映射到前端的响应式表格中
 const loadFormData = async (id: number) => {
   isDataLoading.value = true; 
   try {
-    form.value = JSON.parse(JSON.stringify(initFormData));
     const res = await getWorkOrder(id);
-    Object.assign(form.value, res.data);
+    form.value = { ...initFormData, ...res.data }; // 展开合并保证数据不丢失
 
     if (form.value.customerId) {
       form.value.customerId = String(form.value.customerId);
     }
-    ['productList', 'materialList', 'ctpList', 'printList', 'processList', 'outsourcingList'].forEach(key => { if(!form.value[key]) form.value[key] = []; });
+    // 强制让所有子表即便是 null 也会变成空数组，防止表格组件报错
+    ['productList', 'materialList', 'ctpList', 'printList', 'processList', 'outsourcingList'].forEach(key => { 
+      if(!form.value[key]) form.value[key] = []; 
+    });
     
     if(form.value.outsourcingList && form.value.outsourcingList.length > 0){
         form.value.outsourcingList.forEach((item: any) => {
@@ -690,6 +829,7 @@ const handleExportList = () => {
 const submitForm = () => {
   workOrderFormRef.value?.validate(async (valid: boolean) => {
     if (valid) {
+      // 产品校验
       if (!form.value.productList || form.value.productList.length === 0) {
         proxy?.$modal.msgError("请至少添加一项产品明细");
         return;
@@ -700,6 +840,33 @@ const submitForm = () => {
           return;
         }
       }
+
+      // 👉 核心防御：防止材料行未填写完整导致后端丢弃（保存后查看为空的原因）
+      if (form.value.materialList && form.value.materialList.length > 0) {
+        for (let i = 0; i < form.value.materialList.length; i++) {
+          const mat = form.value.materialList[i];
+          if (!mat.partName || !mat.paperName) {
+            proxy?.$modal.msgError(`材料清单第 ${i + 1} 行的【部件】和【物料名称】必须填写完整！`);
+            return;
+          }
+        }
+      }
+
+      // 👉 全局库存二次终极拦截：提交前合并所有行的需求量，查库存余量
+      const inHouseMats = form.value.materialList.filter((m: any) => m.sourceType === '本厂' && m.paperName);
+      const matSum: Record<string, number> = {};
+      for (const m of inHouseMats) {
+        matSum[m.paperName] = (matSum[m.paperName] || 0) + Number(m.requireQty || 0);
+      }
+      for (const [name, qty] of Object.entries(matSum)) {
+        const found = rawInventoryList.value.find(i => i.itemName === name);
+        const maxQty = found ? Number(found.currentQty || 0) : 0;
+        if (qty > maxQty) {
+          proxy?.$modal.msgError(`保存失败：本厂材料【${name}】的全局总需求（${qty}）已超过可用库存（${maxQty}）！`);
+          return;
+        }
+      }
+
       buttonLoading.value = true;
       form.value.productName = combinedProductNames.value;
 
@@ -720,7 +887,6 @@ const handleDelete = async (row?: any) => {
   await getList();
 };
 
-// ==================== 打印/导出委外单专属逻辑 ====================
 const printDialog = reactive({ visible: false });
 const printData = ref({
   workOrderNo: '', orderDate: '', groups: [] as any[]
@@ -751,7 +917,7 @@ const digitUppercase = (n: number) => {
 
 const handlePrintOutsourcing = async (row: any) => {
   const res = await getWorkOrder(row.id);
-  const woDetail = res.data;
+  const woDetail = res.data as any; 
   
   if (!woDetail.outsourcingList || woDetail.outsourcingList.length === 0) {
     proxy?.$modal.msgWarning("该工单暂无委外加工数据");
@@ -778,24 +944,20 @@ const handlePrintOutsourcing = async (row: any) => {
   printDialog.visible = true;
 };
 
-// 👉 完美生成无错位的 Excel
 const exportExcel = () => {
   const printContent = document.getElementById('printArea')?.innerHTML;
   if (!printContent) return;
   
-  // 注入专门针对 Excel 渲染的强制样式与 XML 头
   const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
     <head>
       <meta charset="UTF-8">
       <style>
         .print-table { width: 100%; border-collapse: collapse; font-family: "SimSun"; font-size: 12px; }
-        /* 强制 Excel 添加所有单元格黑边框，并垂直居中 */
         .print-table td { border: 1px solid #000000; text-align: center; vertical-align: middle; }
         .left-align { text-align: left !important; }
         .font-bold { font-weight: bold; }
         .grey-bg { background-color: #e8e8e8; }
         .print-page { margin-bottom: 40px; }
-        /* 防止长数字变为科学计数法 */
         .center-align { text-align: center; mso-number-format:"\\@"; }
       </style>
     </head>
@@ -844,23 +1006,24 @@ const doPrint = () => {
   }, 200);
 };
 
-onMounted(() => { getList(); getCustomerList(); });
+onMounted(() => { 
+  getList(); 
+  getCustomerList(); 
+  loadInventoryData(); 
+});
 </script>
 
 <style lang="scss" scoped>
-/* ================= 打印预览区样式 ================= */
 .print-wrapper {
   background: #fff;
   padding: 20px;
   color: #000;
-  /* 👉 新增：允许横向滚动 */
   overflow-x: auto; 
   
   .print-page {
     margin-bottom: 40px;
     border: 1px dashed #ccc;
     padding: 20px;
-    /* 👉 新增：强制页面容器的最小宽度大于表格总列宽，这样就能触发外层滚动条而不挤压表格 */
     min-width: 1280px; 
   }
 
@@ -879,7 +1042,7 @@ onMounted(() => { getList(); getCustomerList(); });
     width: 100%;
     border-collapse: collapse;
     font-size: 12px;
-    table-layout: fixed; /* 强制基于 colgroup 分配宽度 */
+    table-layout: fixed; 
 
     td {
       border: 1px solid #333;

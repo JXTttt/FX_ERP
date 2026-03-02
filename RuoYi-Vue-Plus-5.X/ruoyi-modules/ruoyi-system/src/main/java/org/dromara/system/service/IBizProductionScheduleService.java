@@ -65,4 +65,9 @@ public interface IBizProductionScheduleService {
      * @return 是否删除成功
      */
     Boolean deleteWithValidByIds(Collection<Long> ids, Boolean isValid);
+
+    /**
+     * 排产完成并转入库存
+     */
+    Boolean completeProduction(Long id);
 }

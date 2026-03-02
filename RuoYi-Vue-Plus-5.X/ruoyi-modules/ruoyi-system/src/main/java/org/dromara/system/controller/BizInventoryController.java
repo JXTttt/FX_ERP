@@ -102,4 +102,14 @@ public class BizInventoryController extends BaseController {
                           @PathVariable Long[] ids) {
         return toAjax(bizInventoryService.deleteWithValidByIds(List.of(ids), true));
     }
+
+    /**
+     * 成品出货 (扣减库存)
+     */
+    @Log(title = "库存管理-出货", businessType = BusinessType.UPDATE)
+    @PostMapping("/outbound")
+    public R<Void> outbound(@RequestBody org.dromara.system.domain.bo.BizInventoryBo bo) {
+        // 复用BO：id表示要出货的库存ID，currentQty借用来表示【本次要出货的数量】
+        return toAjax(bizInventoryService.outbound(bo.getId(), bo.getCurrentQty()));
+    }
 }

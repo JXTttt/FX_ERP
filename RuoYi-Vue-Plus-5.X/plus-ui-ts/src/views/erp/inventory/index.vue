@@ -73,8 +73,13 @@
         <el-table-column label="采购单价" align="center" prop="purchasePrice" />
         <el-table-column label="总金额" align="center" prop="totalAmount" />
         
-        <el-table-column label="操作" align="center" fixed="right" width="150" class-name="small-padding fixed-width">
+        <el-table-column label="操作" align="center" fixed="right" width="160" class-name="small-padding fixed-width">
           <template #default="scope">
+            
+            <el-tooltip content="出货" placement="top" v-if="isFinishedGood(scope.row.itemType) && Number(scope.row.currentQty) > 0">
+              <el-button link type="warning" icon="Van" @click="handleOutbound(scope.row)"></el-button>
+            </el-tooltip>
+            
             <el-tooltip content="修改" placement="top">
               <el-button link type="primary" icon="Edit" @click="handleUpdate(scope.row)" v-hasPermi="['erp:inventory:edit']"></el-button>
             </el-tooltip>
@@ -142,7 +147,7 @@
                 </el-form-item>
             </el-col>
             <el-col :span="12">
-                <el-form-item label="采购单价" prop="purchasePrice">
+                <el-form-item label="单价" prop="purchasePrice">
                   <el-input-number v-model="form.purchasePrice" :min="0" :precision="4" style="width: 100%" @change="calculateTotal"/>
                 </el-form-item>
             </el-col>
@@ -160,14 +165,43 @@
         </div>
       </template>
     </el-dialog>
+
+    <el-dialog title="成品出货" v-model="outboundDialog.open" width="400px" append-to-body>
+      <el-form label-width="100px">
+        <el-form-item label="物料名称">
+          <el-input v-model="outboundDialog.itemName" disabled />
+        </el-form-item>
+        <el-form-item label="当前总库存">
+          <el-input v-model="outboundDialog.maxQty" disabled>
+            <template #append>{{ outboundDialog.unit }}</template>
+          </el-input>
+        </el-form-item>
+        <el-form-item label="本次出货量">
+          <el-input-number v-model="outboundDialog.outboundQty" :min="1" :max="outboundDialog.maxQty" style="width: 100%" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <div class="dialog-footer">
+          <el-button type="warning" @click="submitOutbound" :loading="outboundDialog.loading">确认出货并扣减</el-button>
+          <el-button @click="outboundDialog.open = false">取 消</el-button>
+        </div>
+      </template>
+    </el-dialog>
+
   </div>
 </template>
 
 <script setup name="Inventory" lang="ts">
+import { ref, reactive, toRefs, onMounted, getCurrentInstance, ComponentInternalInstance } from 'vue';
 import { listInventory, getInventory, delInventory, addInventory, updateInventory } from '@/api/erp/inventory';
 import { InventoryVO, InventoryQuery, InventoryForm } from '@/api/erp/inventory/types';
-// 1. 引入客户查询接口
 import { listCustomer } from '@/api/erp/customer';
+import request from '@/utils/request'; // 👉 新增：引入 request 工具用于发送出货请求
+import { ElForm } from 'element-plus';
+
+type ElFormInstance = InstanceType<typeof ElForm>;
+type DialogOption = { visible: boolean; title: string };
+type PageData<T, Q> = { form: T; queryParams: Q; rules: any };
 
 const { proxy } = getCurrentInstance() as ComponentInternalInstance;
 const { erp_item_type, erp_item_unit } = toRefs<any>(proxy?.useDict('erp_item_type', 'erp_item_unit'));
@@ -181,7 +215,6 @@ const single = ref(true);
 const multiple = ref(true);
 const total = ref(0);
 
-// 2. 供应商列表数据
 const supplierOptions = ref<any[]>([]);
 
 const queryFormRef = ref<ElFormInstance>();
@@ -190,6 +223,17 @@ const inventoryFormRef = ref<ElFormInstance>();
 const dialog = reactive<DialogOption>({
   visible: false,
   title: ''
+});
+
+// 👉 新增：出货弹窗状态数据
+const outboundDialog = ref({
+  open: false,
+  loading: false,
+  id: undefined as any,
+  itemName: '',
+  maxQty: 0,
+  outboundQty: 1,
+  unit: '个'
 });
 
 const initFormData: InventoryForm = {
@@ -212,7 +256,6 @@ const data = reactive<PageData<InventoryForm, InventoryQuery>>({
     itemType: undefined,
     itemName: undefined,
     spec: undefined,
-    // 删除了其他不必要的查询参数
     params: {
     }
   },
@@ -228,22 +271,27 @@ const data = reactive<PageData<InventoryForm, InventoryQuery>>({
 
 const { queryParams, form, rules } = toRefs(data);
 
-/** 3. 获取供应商列表 */
 const getSupplierList = async () => {
-  // 假设 customerType '2' 代表供应商，根据实际字典值调整
-  // pageSize 设置大一些以获取所有供应商
-  const res = await listCustomer({ pageNum: 1, pageSize: 1000, customerType: '2' });
+  // 👉 删除了 customerType 限制，加载所有客户和供应商用于名字反显
+  const res = await listCustomer({ pageNum: 1, pageSize: 2000 } as any);
   supplierOptions.value = res.rows;
 }
 
-/** 4. 自动计算总金额 */
+// 👉 新增：判断是否为成品（兼容字典数字值和中文文字）
+const isFinishedGood = (val: any) => {
+  if (!val) return false;
+  if (val === '成品') return true;
+  // 如果存的是字典的 ID（如 '1', '2'）
+  const dictItem = erp_item_type.value?.find((item: any) => item.value == val);
+  return dictItem && dictItem.label === '成品';
+}
+
 const calculateTotal = () => {
     if (form.value.currentQty && form.value.purchasePrice) {
         form.value.totalAmount = Number((form.value.currentQty * form.value.purchasePrice).toFixed(2));
     }
 }
 
-/** 查询库存管理列表 */
 const getList = async () => {
   loading.value = true;
   const res = await listInventory(queryParams.value);
@@ -252,45 +300,38 @@ const getList = async () => {
   loading.value = false;
 }
 
-/** 取消按钮 */
 const cancel = () => {
   reset();
   dialog.visible = false;
 }
 
-/** 表单重置 */
 const reset = () => {
   form.value = {...initFormData};
   inventoryFormRef.value?.resetFields();
 }
 
-/** 搜索按钮操作 */
 const handleQuery = () => {
   queryParams.value.pageNum = 1;
   getList();
 }
 
-/** 重置按钮操作 */
 const resetQuery = () => {
   queryFormRef.value?.resetFields();
   handleQuery();
 }
 
-/** 多选框选中数据 */
 const handleSelectionChange = (selection: InventoryVO[]) => {
   ids.value = selection.map(item => item.id);
   single.value = selection.length != 1;
   multiple.value = !selection.length;
 }
 
-/** 新增按钮操作 */
 const handleAdd = () => {
   reset();
   dialog.visible = true;
   dialog.title = "添加库存管理";
 }
 
-/** 修改按钮操作 */
 const handleUpdate = async (row?: InventoryVO) => {
   reset();
   const _id = row?.id || ids.value[0]
@@ -300,12 +341,10 @@ const handleUpdate = async (row?: InventoryVO) => {
   dialog.title = "修改库存管理";
 }
 
-/** 提交按钮 */
 const submitForm = () => {
   inventoryFormRef.value?.validate(async (valid: boolean) => {
     if (valid) {
       buttonLoading.value = true;
-      // 解决TS id 类型检查问题
       if ((form.value as any).id) {
         await updateInventory(form.value).finally(() =>  buttonLoading.value = false);
       } else {
@@ -318,7 +357,6 @@ const submitForm = () => {
   });
 }
 
-/** 删除按钮操作 */
 const handleDelete = async (row?: InventoryVO) => {
   const _ids = row?.id || ids.value;
   await proxy?.$modal.confirm('是否确认删除库存管理编号为"' + _ids + '"的数据项？').finally(() => loading.value = false);
@@ -327,15 +365,46 @@ const handleDelete = async (row?: InventoryVO) => {
   await getList();
 }
 
-/** 导出按钮操作 */
 const handleExport = () => {
   proxy?.download('erp/inventory/export', {
     ...queryParams.value
   }, `inventory_${new Date().getTime()}.xlsx`)
 }
 
+// 👉 新增：打开出货弹窗
+function handleOutbound(row: any) {
+  outboundDialog.value = {
+    open: true,
+    loading: false,
+    id: row.id,
+    itemName: row.itemName,
+    maxQty: Number(row.currentQty), 
+    outboundQty: 1, 
+    unit: row.unit || '个'
+  };
+}
+
+// 👉 新增：提交出货请求
+function submitOutbound() {
+  outboundDialog.value.loading = true;
+  request({
+    url: '/erp/inventory/outbound',
+    method: 'post',
+    data: {
+      id: outboundDialog.value.id,
+      currentQty: outboundDialog.value.outboundQty // 借用 currentQty 传扣减量
+    }
+  }).then(() => {
+    proxy?.$modal.msgSuccess("出货扣减成功！");
+    outboundDialog.value.open = false;
+    getList(); // 刷新列表
+  }).finally(() => {
+    outboundDialog.value.loading = false;
+  });
+}
+
 onMounted(() => {
   getList();
-  getSupplierList(); // 页面加载时获取供应商数据
+  getSupplierList(); 
 });
 </script>

@@ -26,6 +26,7 @@ import java.util.Collection;
  * @author JXTttt
  * @date 2026-03-02
  */
+@SuppressWarnings("SpringJavaInjectionPointsAutowiringInspection")
 @Slf4j
 @RequiredArgsConstructor
 @Service
@@ -33,24 +34,20 @@ public class BizProductionScheduleServiceImpl implements IBizProductionScheduleS
 
     private final BizProductionScheduleMapper baseMapper;
 
-    /**
-     * 查询生产排产主
-     *
-     * @param id 主键
-     * @return 生产排产主
-     */
+    @SuppressWarnings("SpringJavaInjectionPointsAutowiringInspection")
+    private final org.dromara.system.mapper.BizInventoryMapper inventoryMapper;
+
+    @SuppressWarnings("SpringJavaInjectionPointsAutowiringInspection")
+    private final org.dromara.system.mapper.BizWoProductMapper woProductMapper;
+
+    @SuppressWarnings("SpringJavaInjectionPointsAutowiringInspection")
+    private final org.dromara.system.mapper.BizWorkOrderMapper workOrderMapper;
+
     @Override
     public BizProductionScheduleVo queryById(Long id){
         return baseMapper.selectVoById(id);
     }
 
-    /**
-     * 分页查询生产排产主列表
-     *
-     * @param bo        查询条件
-     * @param pageQuery 分页参数
-     * @return 生产排产主分页列表
-     */
     @Override
     public TableDataInfo<BizProductionScheduleVo> queryPageList(BizProductionScheduleBo bo, PageQuery pageQuery) {
         LambdaQueryWrapper<BizProductionSchedule> lqw = buildQueryWrapper(bo);
@@ -58,12 +55,6 @@ public class BizProductionScheduleServiceImpl implements IBizProductionScheduleS
         return TableDataInfo.build(result);
     }
 
-    /**
-     * 查询符合条件的生产排产主列表
-     *
-     * @param bo 查询条件
-     * @return 生产排产主列表
-     */
     @Override
     public List<BizProductionScheduleVo> queryList(BizProductionScheduleBo bo) {
         LambdaQueryWrapper<BizProductionSchedule> lqw = buildQueryWrapper(bo);
@@ -82,12 +73,6 @@ public class BizProductionScheduleServiceImpl implements IBizProductionScheduleS
         return lqw;
     }
 
-    /**
-     * 新增生产排产主
-     *
-     * @param bo 生产排产主
-     * @return 是否新增成功
-     */
     @Override
     public Boolean insertByBo(BizProductionScheduleBo bo) {
         BizProductionSchedule add = MapstructUtils.convert(bo, BizProductionSchedule.class);
@@ -99,12 +84,6 @@ public class BizProductionScheduleServiceImpl implements IBizProductionScheduleS
         return flag;
     }
 
-    /**
-     * 修改生产排产主
-     *
-     * @param bo 生产排产主
-     * @return 是否修改成功
-     */
     @Override
     public Boolean updateByBo(BizProductionScheduleBo bo) {
         BizProductionSchedule update = MapstructUtils.convert(bo, BizProductionSchedule.class);
@@ -112,25 +91,61 @@ public class BizProductionScheduleServiceImpl implements IBizProductionScheduleS
         return baseMapper.updateById(update) > 0;
     }
 
-    /**
-     * 保存前的数据校验
-     */
     private void validEntityBeforeSave(BizProductionSchedule entity){
-        //TODO 做一些数据校验,如唯一约束
     }
 
-    /**
-     * 校验并批量删除生产排产主信息
-     *
-     * @param ids     待删除的主键集合
-     * @param isValid 是否进行有效性校验
-     * @return 是否删除成功
-     */
     @Override
     public Boolean deleteWithValidByIds(Collection<Long> ids, Boolean isValid) {
         if(isValid){
-            //TODO 做一些业务上的校验,判断是否需要校验
         }
         return baseMapper.deleteByIds(ids) > 0;
+    }
+
+    @Override
+    @org.springframework.transaction.annotation.Transactional(rollbackFor = Exception.class)
+    public Boolean completeProduction(Long id) {
+        org.dromara.system.domain.BizProductionSchedule schedule = baseMapper.selectById(id);
+        if (schedule == null) return false;
+
+        org.dromara.system.domain.BizInventory inv = new org.dromara.system.domain.BizInventory();
+        inv.setUniqueCode(schedule.getWorkOrderNo());
+        inv.setItemType("成品");
+        inv.setItemName(schedule.getItemName());
+
+        // 设置初始入库数量
+        java.math.BigDecimal initialQty = new java.math.BigDecimal(schedule.getQuantity());
+        inv.setCurrentQty(initialQty);
+
+        // 尝试从原工单产品表中拉取该产品的“规格”、“单位”和“单价”
+        org.dromara.system.domain.BizWoProduct product = woProductMapper.selectOne(
+            new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<org.dromara.system.domain.BizWoProduct>()
+                .eq(org.dromara.system.domain.BizWoProduct::getWorkOrderId, schedule.getWorkOrderId())
+                .eq(org.dromara.system.domain.BizWoProduct::getProductName, schedule.getItemName())
+                .last("limit 1")
+        );
+
+        if (product != null) {
+            inv.setSpec(product.getSpec());
+            inv.setUnit(product.getUnit());
+
+            // 👉 终极修复：不再判断类型，直接转成 String 再转 BigDecimal，绝不报错！
+            if (product.getUnitPrice() != null) {
+                java.math.BigDecimal unitPrice = new java.math.BigDecimal(String.valueOf(product.getUnitPrice()));
+
+                inv.setPurchasePrice(unitPrice); // 存入单价
+                inv.setTotalAmount(initialQty.multiply(unitPrice)); // 数量 * 单价
+            }
+        } else {
+            inv.setUnit("个");
+        }
+
+        // 查询原工单，把客户ID塞入库存记录
+        org.dromara.system.domain.BizWorkOrder wo = workOrderMapper.selectById(schedule.getWorkOrderId());
+        if (wo != null) {
+            inv.setSupplierId(wo.getCustomerId());
+        }
+
+        inventoryMapper.insert(inv);
+        return baseMapper.deleteById(id) > 0;
     }
 }

@@ -11,20 +11,18 @@ import org.dromara.common.core.utils.SpringUtils;
 import org.dromara.common.core.utils.StringUtils;
 import org.dromara.common.mybatis.core.page.PageQuery;
 import org.dromara.common.mybatis.core.page.TableDataInfo;
+import org.dromara.system.mapper.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 // 引入排产表
 import org.dromara.system.domain.BizProductionSchedule;
 import org.dromara.system.domain.BizScheduleNode;
-import org.dromara.system.mapper.BizProductionScheduleMapper;
-import org.dromara.system.mapper.BizScheduleNodeMapper;
 
 // 引入主表
 import org.dromara.system.domain.BizWorkOrder;
 import org.dromara.system.domain.bo.BizWorkOrderBo;
 import org.dromara.system.domain.vo.BizWorkOrderVo;
-import org.dromara.system.mapper.BizWorkOrderMapper;
 import org.dromara.system.service.IBizWorkOrderService;
 
 // 引入子表实体
@@ -40,16 +38,7 @@ import org.dromara.system.domain.BizWoOutsourcing;
 import org.dromara.system.domain.BizPurchase;
 
 // 引入子表Mapper
-import org.dromara.system.mapper.BizWoProductMapper;
-import org.dromara.system.mapper.BizWoMaterialMapper;
-import org.dromara.system.mapper.BizWoCtpMapper;
-import org.dromara.system.mapper.BizWoPrintMapper;
-import org.dromara.system.mapper.BizWoPostProcessMapper;
-import org.dromara.system.mapper.BizWoExtraPurchaseMapper;
-import org.dromara.system.mapper.BizWoProcessMapper;
-import org.dromara.system.mapper.BizWoOutsourcingMapper;
 // 👉 新增：引入采购Mapper
-import org.dromara.system.mapper.BizPurchaseMapper;
 
 import java.util.Collection;
 import java.util.List;
@@ -82,6 +71,7 @@ public class BizWorkOrderServiceImpl implements IBizWorkOrderService {
     private final BizWoExtraPurchaseMapper extraPurchaseMapper;
     private final BizWoProcessMapper processMapper;
     private final BizWoOutsourcingMapper outsourcingMapper;
+    private final BizInventoryMapper inventoryMapper;
 
     // 排产大表相关
     private final BizProductionScheduleMapper scheduleMapper;
@@ -192,13 +182,20 @@ public class BizWorkOrderServiceImpl implements IBizWorkOrderService {
 
         if (bo.getProductList() != null && !bo.getProductList().isEmpty()) {
             List<BizWoProduct> list = MapstructUtils.convert(bo.getProductList(), BizWoProduct.class);
-            list.forEach(i -> { i.setWorkOrderId(woId); i.setId(null); });
-            productMapper.insertBatch(list);
+            // 👉 过滤掉空行
+            list = list.stream().filter(i -> StringUtils.isNotBlank(i.getProductName())).collect(java.util.stream.Collectors.toList());
+            if(!list.isEmpty()) {
+                list.forEach(i -> { i.setWorkOrderId(woId); i.setId(null); });
+                productMapper.insertBatch(list);
+            }
         }
         if (bo.getMaterialList() != null && !bo.getMaterialList().isEmpty()) {
             List<BizWoMaterial> list = MapstructUtils.convert(bo.getMaterialList(), BizWoMaterial.class);
-            list.forEach(i -> { i.setWorkOrderId(woId); i.setId(null); });
-            materialMapper.insertBatch(list);
+            list = list.stream().filter(i -> StringUtils.isNotBlank(i.getPartName())).collect(java.util.stream.Collectors.toList());
+            if(!list.isEmpty()) {
+                list.forEach(i -> { i.setWorkOrderId(woId); i.setId(null); });
+                materialMapper.insertBatch(list);
+            }
         }
         if (bo.getCtpList() != null && !bo.getCtpList().isEmpty()) {
             List<BizWoCtp> list = MapstructUtils.convert(bo.getCtpList(), BizWoCtp.class);
@@ -222,13 +219,20 @@ public class BizWorkOrderServiceImpl implements IBizWorkOrderService {
         }
         if (bo.getProcessList() != null && !bo.getProcessList().isEmpty()) {
             List<BizWoProcess> list = MapstructUtils.convert(bo.getProcessList(), BizWoProcess.class);
-            list.forEach(i -> { i.setWorkOrderId(woId); i.setId(null); });
-            processMapper.insertBatch(list);
+            // 👉 过滤掉工序名为空的行（彻底解决你报错的问题）
+            list = list.stream().filter(i -> StringUtils.isNotBlank(i.getProcessName())).collect(java.util.stream.Collectors.toList());
+            if(!list.isEmpty()) {
+                list.forEach(i -> { i.setWorkOrderId(woId); i.setId(null); });
+                processMapper.insertBatch(list);
+            }
         }
         if (bo.getOutsourcingList() != null && !bo.getOutsourcingList().isEmpty()) {
             List<BizWoOutsourcing> list = MapstructUtils.convert(bo.getOutsourcingList(), BizWoOutsourcing.class);
-            list.forEach(i -> { i.setWorkOrderId(woId); i.setId(null); });
-            outsourcingMapper.insertBatch(list);
+            list = list.stream().filter(i -> StringUtils.isNotBlank(i.getProcessProject())).collect(java.util.stream.Collectors.toList());
+            if(!list.isEmpty()) {
+                list.forEach(i -> { i.setWorkOrderId(woId); i.setId(null); });
+                outsourcingMapper.insertBatch(list);
+            }
         }
     }
 
@@ -247,11 +251,10 @@ public class BizWorkOrderServiceImpl implements IBizWorkOrderService {
     }
 
     @Override
-    @Transactional(rollbackFor = Exception.class) // 👉 新增：因为涉及到多张表的数据插入，必须加事务回滚保护
+    @Transactional(rollbackFor = Exception.class)
     public Boolean auditWorkOrder(BizWorkOrderBo bo) {
         BizWorkOrder workOrder = new BizWorkOrder();
         workOrder.setId(bo.getId());
-        // 2-已通过, 3-已驳回
         workOrder.setAuditStatus(bo.getAuditStatus());
         workOrder.setAuditBy(org.dromara.common.satoken.utils.LoginHelper.getUsername());
 
@@ -261,9 +264,11 @@ public class BizWorkOrderServiceImpl implements IBizWorkOrderService {
         if (flag && "2".equals(bo.getAuditStatus())) {
             // 1. 自动生成排产大表格子
             generateScheduleTasks(bo.getId());
-
-            // 2. 👉 新增逻辑：自动生成采购需求单
+            // 2. 自动生成采购需求单 (来源: 订购)
             generatePurchaseOrders(bo.getId());
+
+            // 3. 👉 新增逻辑：自动扣减本厂原材料库存 (来源: 本厂)
+            deductInHouseMaterials(bo.getId());
         }
 
         return flag;
@@ -374,6 +379,57 @@ public class BizWorkOrderServiceImpl implements IBizWorkOrderService {
 
                 scheduleNodeMapper.insert(node);
             }
+        }
+    }
+
+    /**
+     * 根据工单材料清单，自动扣减“本厂”来源的原材料库存
+     */
+    private void deductInHouseMaterials(Long workOrderId) {
+        // 1. 精准查询该工单下，来源类型为“本厂”的所有材料
+        List<BizWoMaterial> materials = materialMapper.selectList(
+            new LambdaQueryWrapper<BizWoMaterial>()
+                .eq(BizWoMaterial::getWorkOrderId, workOrderId)
+                .eq(BizWoMaterial::getSourceType, "本厂")
+        );
+
+        if (materials == null || materials.isEmpty()) return;
+
+        // 2. 遍历本厂材料，去库存表里找并扣减
+        for (BizWoMaterial material : materials) {
+            if (material.getRequireQty() == null || material.getRequireQty() <= 0) {
+                continue; // 数量为0的跳过
+            }
+
+            // 在库存表中寻找该名称的材料 (这里以物料名称为准进行匹配)
+            org.dromara.system.domain.BizInventory inv = inventoryMapper.selectOne(
+                new LambdaQueryWrapper<org.dromara.system.domain.BizInventory>()
+                    .eq(org.dromara.system.domain.BizInventory::getItemName, material.getPaperName())
+                    .last("limit 1")
+            );
+
+            // 校验1：仓库里根本没有这种材料
+            if (inv == null) {
+                throw new ServiceException("审批失败：仓库中不存在名为【" + material.getPaperName() + "】的本厂材料，请先去库存管理录入！");
+            }
+
+            // 校验2：库存数量不足
+            java.math.BigDecimal reqQty = new java.math.BigDecimal(material.getRequireQty());
+            if (inv.getCurrentQty().compareTo(reqQty) < 0) {
+                throw new ServiceException("审批失败：本厂材料【" + material.getPaperName() + "】库存不足！当前库存剩余：" + inv.getCurrentQty() + "，工单需要：" + reqQty);
+            }
+
+            // 3. 校验通过，执行扣减
+            java.math.BigDecimal newQty = inv.getCurrentQty().subtract(reqQty);
+            inv.setCurrentQty(newQty);
+
+            // 同步更新剩余库存的总金额
+            if (inv.getPurchasePrice() != null) {
+                inv.setTotalAmount(newQty.multiply(inv.getPurchasePrice()));
+            }
+
+            // 更新数据库
+            inventoryMapper.updateById(inv);
         }
     }
 }
