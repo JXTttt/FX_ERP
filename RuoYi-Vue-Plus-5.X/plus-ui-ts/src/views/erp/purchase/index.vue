@@ -1,88 +1,109 @@
 <template>
-  <div class="app-container">
-    <el-form :model="queryParams" ref="queryRef" :inline="true" v-show="showSearch" label-width="90px">
-      <el-form-item label="采购单号" prop="purchaseNo">
-        <el-input v-model="queryParams.purchaseNo" placeholder="请输入采购单号" clearable @keyup.enter="handleQuery" />
-      </el-form-item>
-      <el-form-item label="关联工单" prop="relatedWoNo">
-        <el-input v-model="queryParams.relatedWoNo" placeholder="请输入关联工单编号" clearable @keyup.enter="handleQuery" />
-      </el-form-item>
-      <el-form-item label="供应商" prop="supplierId">
-        <el-select v-model="queryParams.supplierId" placeholder="请选择供应商" filterable clearable style="width: 200px">
-          <el-option v-for="item in supplierList" :key="String(item.id)" :label="item.companyName" :value="String(item.id)" />
-        </el-select>
-      </el-form-item>
-      <el-form-item label="采购状态" prop="status">
-        <el-select v-model="queryParams.status" placeholder="请选择状态" clearable style="width: 200px">
-          <el-option label="待处理" value="0" />
-          <el-option label="已批" value="1" />
-          <el-option label="已验收" value="2" />
-          <el-option label="已驳回" value="3" />
-        </el-select>
-      </el-form-item>
-      <el-form-item>
-        <el-button type="primary" icon="Search" @click="handleQuery">搜索</el-button>
-        <el-button icon="Refresh" @click="resetQuery">重置</el-button>
-      </el-form-item>
-    </el-form>
+  <div class="app-container p-2">
+    <transition :enter-active-class="proxy?.animate.searchAnimate.enter" :leave-active-class="proxy?.animate.searchAnimate.leave">
+      <div v-show="showSearch" class="mb-[10px]">
+        <el-card shadow="hover">
+          <el-form :model="queryParams" ref="queryRef" :inline="true" label-width="90px">
+            <el-form-item label="采购单号" prop="purchaseNo">
+              <el-input v-model="queryParams.purchaseNo" placeholder="请输入采购单号" clearable @keyup.enter="handleQuery" style="width: 180px"/>
+            </el-form-item>
+            <el-form-item label="关联工单" prop="relatedWoNo">
+              <el-input v-model="queryParams.relatedWoNo" placeholder="请输入关联工单编号" clearable @keyup.enter="handleQuery" style="width: 180px"/>
+            </el-form-item>
+            <el-form-item label="供应商" prop="supplierId">
+              <el-select v-model="queryParams.supplierId" placeholder="请选择供应商" filterable clearable style="width: 200px">
+                <el-option v-for="item in supplierList" :key="String(item.id)" :label="item.companyName" :value="String(item.id)" />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="采购状态" prop="status">
+              <el-select v-model="queryParams.status" placeholder="请选择状态" clearable style="width: 120px">
+                <el-option label="待处理" value="0" />
+                <el-option label="已批" value="1" />
+                <el-option label="已验收" value="2" />
+                <el-option label="已驳回" value="3" />
+              </el-select>
+            </el-form-item>
+            <el-form-item>
+              <el-button type="primary" icon="Search" @click="handleQuery">搜索</el-button>
+              <el-button icon="Refresh" @click="resetQuery">重置</el-button>
+            </el-form-item>
+          </el-form>
+        </el-card>
+      </div>
+    </transition>
 
-    <el-row :gutter="10" class="mb8">
-      <el-col :span="1.5">
-        <el-button type="primary" plain icon="Plus" @click="handleAdd" v-hasPermi="['erp:purchase:add']">新增手工单</el-button>
-      </el-col>
-      <el-col :span="1.5">
-        <el-button type="warning" plain icon="Download" @click="handleExport" v-hasPermi="['erp:purchase:export']">导出</el-button>
-      </el-col>
-      <right-toolbar v-model:showSearch="showSearch" @queryTable="getList"></right-toolbar>
-    </el-row>
+    <el-card shadow="never">
+      <template #header>
+        <el-row :gutter="10" class="mb8">
+          <el-col :span="1.5">
+            <el-button type="primary" plain icon="Plus" @click="handleAdd" v-hasPermi="['erp:purchase:add']">新增手工单</el-button>
+          </el-col>
+          <el-col :span="1.5">
+            <el-button type="warning" plain icon="Download" @click="handleExport" v-hasPermi="['erp:purchase:export']">导出采购明细</el-button>
+          </el-col>
+          <right-toolbar v-model:showSearch="showSearch" @queryTable="getList"></right-toolbar>
+        </el-row>
+      </template>
 
-    <el-table v-loading="loading" :data="purchaseList" @selection-change="handleSelectionChange" border>
-      <el-table-column type="selection" width="55" align="center" />
-      <el-table-column label="采购单号" align="center" prop="purchaseNo" width="160" />
-      <el-table-column label="关联工单" align="center" prop="relatedWoNo" width="110" />
-      <el-table-column label="供应商名称" align="center" prop="supplierId" min-width="150" show-overflow-tooltip>
-        <template #default="scope">
-          <span>{{ getSupplierName(scope.row.supplierId) }}</span>
-        </template>
-      </el-table-column>
-      <el-table-column label="采购内容" align="center" prop="itemName" min-width="120" show-overflow-tooltip />
-      <el-table-column label="规格" align="center" prop="spec" width="100" show-overflow-tooltip />
-      <el-table-column label="采购量" align="center" prop="applyQty" width="80">
-        <template #default="scope">
-          <span style="color: #409EFF; font-weight: bold;">{{ scope.row.applyQty }}</span>
-        </template>
-      </el-table-column>
-      <el-table-column label="验收量" align="center" prop="receivedQty" width="80">
-        <template #default="scope">
-          <span style="color: #67C23A; font-weight: bold;">{{ scope.row.receivedQty || '--' }}</span>
-        </template>
-      </el-table-column>
-      <el-table-column label="单价" align="center" prop="price" width="80" />
-      <el-table-column label="总金额" align="center" prop="totalPrice" width="100">
-        <template #default="scope">
-          <span v-if="scope.row.totalPrice" style="color: #F56C6C; font-weight: bold;">￥{{ scope.row.totalPrice }}</span>
-        </template>
-      </el-table-column>
-      <el-table-column label="状态" align="center" prop="status" width="80">
-        <template #default="scope">
-          <el-tag v-if="scope.row.status === '0'" type="warning">待处理</el-tag>
-          <el-tag v-else-if="scope.row.status === '1'" type="primary">已批</el-tag>
-          <el-tag v-else-if="scope.row.status === '2'" type="success">已验收</el-tag>
-          <el-tag v-else-if="scope.row.status === '3'" type="danger">已驳回</el-tag>
-          <span v-else>--</span>
-        </template>
-      </el-table-column>
-      <el-table-column label="操作" align="center" class-name="small-padding fixed-width" width="180" fixed="right">
-        <template #default="scope">
-          <el-button v-if="['0', '1'].includes(scope.row.status)" link type="success" icon="Check" @click="handleAccept(scope.row)" v-hasPermi="['erp:purchase:edit']">验收</el-button>
-          
-          <el-button v-if="scope.row.status !== '2'" link type="primary" icon="Edit" @click="handleUpdate(scope.row)" v-hasPermi="['erp:purchase:edit']">处理</el-button>
-          <el-button link type="danger" icon="Delete" @click="handleDelete(scope.row)" v-hasPermi="['erp:purchase:remove']">删除</el-button>
-        </template>
-      </el-table-column>
-    </el-table>
+      <el-table v-loading="loading" :data="purchaseList" @selection-change="handleSelectionChange" border>
+        <el-table-column type="selection" width="55" align="center" />
+        <el-table-column label="采购单号" align="center" prop="purchaseNo" width="160" />
+        <el-table-column label="关联工单" align="center" prop="relatedWoNo" width="110">
+           <template #default="scope">
+             <span v-if="scope.row.relatedWoNo">{{ scope.row.relatedWoNo }}</span>
+             <span v-else style="color: #C0C4CC;">无关联</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="供应商名称" align="center" prop="supplierId" min-width="150" show-overflow-tooltip>
+          <template #default="scope">
+            <strong>{{ getSupplierName(scope.row.supplierId) }}</strong>
+          </template>
+        </el-table-column>
+        <el-table-column label="采购内容" align="center" prop="itemName" min-width="120" show-overflow-tooltip />
+        <el-table-column label="规格" align="center" prop="spec" width="100" show-overflow-tooltip />
+        <el-table-column label="采购量" align="center" prop="applyQty" width="80">
+          <template #default="scope">
+            <span style="color: #409EFF; font-weight: bold;">{{ scope.row.applyQty }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="验收量" align="center" prop="receivedQty" width="80">
+          <template #default="scope">
+            <span style="color: #67C23A; font-weight: bold;">{{ scope.row.receivedQty || '--' }}</span>
+          </template>
+        </el-table-column>
+        
+        <el-table-column label="单价" align="center" prop="price" width="100">
+           <template #default="scope">
+             <span v-if="scope.row.price" style="color: #606266;">￥{{ Number(scope.row.price).toFixed(4) }}</span>
+             <span v-else style="color: #C0C4CC;">-</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="总金额" align="center" prop="totalPrice" width="120">
+          <template #default="scope">
+            <span v-if="scope.row.totalPrice" style="color: #F56C6C; font-weight: bold; font-size: 15px;">￥{{ Number(scope.row.totalPrice).toFixed(2) }}</span>
+            <span v-else style="color: #C0C4CC;">-</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="状态" align="center" prop="status" width="90">
+          <template #default="scope">
+            <el-tag v-if="scope.row.status === '0'" type="warning">待处理</el-tag>
+            <el-tag v-else-if="scope.row.status === '1'" type="primary">已批</el-tag>
+            <el-tag v-else-if="scope.row.status === '2'" type="success">已验收</el-tag>
+            <el-tag v-else-if="scope.row.status === '3'" type="danger">已驳回</el-tag>
+            <span v-else>--</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" align="center" class-name="small-padding fixed-width" width="180" fixed="right">
+          <template #default="scope">
+            <el-button v-if="['0', '1'].includes(scope.row.status)" link type="success" icon="Check" @click="handleAccept(scope.row)" v-hasPermi="['erp:purchase:edit']">验收</el-button>
+            <el-button v-if="scope.row.status !== '2'" link type="primary" icon="Edit" @click="handleUpdate(scope.row)" v-hasPermi="['erp:purchase:edit']">处理</el-button>
+            <el-button link type="danger" icon="Delete" @click="handleDelete(scope.row)" v-hasPermi="['erp:purchase:remove']">删除</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
 
-    <pagination v-show="total>0" :total="total" v-model:page="queryParams.pageNum" v-model:limit="queryParams.pageSize" @pagination="getList" />
+      <pagination v-show="total>0" :total="total" v-model:page="queryParams.pageNum" v-model:limit="queryParams.pageSize" @pagination="getList" />
+    </el-card>
 
     <el-dialog :title="title" v-model="open" width="700px" append-to-body>
       <el-form ref="purchaseRef" :model="form" :rules="rules" label-width="100px">
@@ -217,7 +238,6 @@ const title = ref("");
 
 const purchaseRef = ref<any>(null);
 
-// 验收专属数据
 const acceptOpen = ref(false);
 const acceptForm = ref<any>({});
 
@@ -346,7 +366,6 @@ function handleUpdate(row: any) {
     if (form.value.supplierId) {
       form.value.supplierId = String(form.value.supplierId);
     }
-    // 如果之前是已验收状态的数据被强行打开处理，为了防止下拉框报错，重置为已批
     if (form.value.status === '2') {
         form.value.status = '1'; 
     }
@@ -355,9 +374,7 @@ function handleUpdate(row: any) {
   });
 }
 
-// 👉 新增：打开验收弹窗
 function handleAccept(row: any) {
-  // 把行数据拉取过来，实际收货量默认等于采购量
   acceptForm.value = {
     id: row.id,
     purchaseNo: row.purchaseNo,
@@ -367,13 +384,12 @@ function handleAccept(row: any) {
     applyQty: row.applyQty,
     receivedQty: row.receivedQty && row.receivedQty > 0 ? row.receivedQty : row.applyQty,
     price: row.price,
-    status: '2' // 直接锁定状态为：2-已验收
+    status: '2' 
   };
-  calcAcceptTotal(); // 算一下初始总价
+  calcAcceptTotal(); 
   acceptOpen.value = true;
 }
 
-// 👉 新增：提交验收
 function submitAccept() {
   if (acceptForm.value.receivedQty == null || acceptForm.value.receivedQty <= 0) {
     proxy.$modal.msgError("实际验收量必须大于0！");
@@ -419,10 +435,11 @@ function handleDelete(row: any) {
   }).catch(() => {});
 }
 
+// 👉 核心改动：深度拷贝隔离导出参数，防止解析异常
 function handleExport() {
-  proxy.download('erp/purchase/export', {
-    ...queryParams.value
-  }, `purchase_${new Date().getTime()}.xlsx`)
+  const exportParams: any = JSON.parse(JSON.stringify(queryParams.value));
+  exportParams.params = undefined; 
+  proxy.download('erp/purchase/export', exportParams, `采购订单明细_${new Date().getTime()}.xlsx`);
 }
 
 onMounted(() => {

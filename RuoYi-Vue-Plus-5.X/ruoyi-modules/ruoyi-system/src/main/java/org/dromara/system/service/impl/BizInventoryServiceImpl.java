@@ -9,6 +9,8 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.dromara.system.mapper.BizCustomerMapper;
+import org.dromara.system.mapper.BizFinanceRecordMapper;
 import org.springframework.stereotype.Service;
 import org.dromara.system.domain.bo.BizInventoryBo;
 import org.dromara.system.domain.vo.BizInventoryVo;
@@ -32,6 +34,10 @@ import java.util.Collection;
 public class BizInventoryServiceImpl implements IBizInventoryService {
 
     private final BizInventoryMapper baseMapper;
+    @SuppressWarnings("SpringJavaInjectionPointsAutowiringInspection")
+    private final BizFinanceRecordMapper financeRecordMapper;
+    @SuppressWarnings("SpringJavaInjectionPointsAutowiringInspection")
+    private final BizCustomerMapper customerMapper;
 
     /**
      * 查询库存管理
@@ -67,7 +73,27 @@ public class BizInventoryServiceImpl implements IBizInventoryService {
     @Override
     public List<BizInventoryVo> queryList(BizInventoryBo bo) {
         LambdaQueryWrapper<BizInventory> lqw = buildQueryWrapper(bo);
-        return baseMapper.selectVoList(lqw);
+        List<BizInventoryVo> list = baseMapper.selectVoList(lqw);
+
+        // ================= 核心翻译逻辑 =================
+        // 遍历所有要导出的数据，把数字 ID 翻译成公司名称
+        for (BizInventoryVo vo : list) {
+            if (vo.getSupplierId() != null) {
+                try {
+                    org.dromara.system.domain.BizCustomer customer = customerMapper.selectById(vo.getSupplierId());
+                    if (customer != null) {
+                        vo.setSupplierName(customer.getCompanyName());
+                    } else {
+                        vo.setSupplierName("未知或已删除的供应商");
+                    }
+                } catch (Exception e) {
+                    vo.setSupplierName("翻译失败");
+                }
+            }
+        }
+        // ===============================================
+
+        return list;
     }
 
     private LambdaQueryWrapper<BizInventory> buildQueryWrapper(BizInventoryBo bo) {
@@ -161,18 +187,44 @@ public class BizInventoryServiceImpl implements IBizInventoryService {
             throw new org.dromara.common.core.exception.ServiceException("库存记录不存在！");
         }
         if (inv.getCurrentQty().compareTo(outboundQty) < 0) {
-            throw new org.dromara.common.core.exception.ServiceException("出货失败：出货数量(" + outboundQty + ")不能大于当前库存剩余量(" + inv.getCurrentQty() + ")！");
+            throw new org.dromara.common.core.exception.ServiceException("出货失败：出货数量不能大于当前库存剩余量！");
         }
 
         // 1. 扣减库存数量
         java.math.BigDecimal newQty = inv.getCurrentQty().subtract(outboundQty);
         inv.setCurrentQty(newQty);
 
-        // 2. 👉 新增：同步重新计算剩余库存的总金额
+        // 2. 同步重新计算剩余库存的总金额
         if (inv.getPurchasePrice() != null) {
             inv.setTotalAmount(newQty.multiply(inv.getPurchasePrice()));
         }
 
-        return baseMapper.updateById(inv) > 0;
+        boolean flag = baseMapper.updateById(inv) > 0;
+
+        // 3. 👉 业财联动：如果是成品出货，自动给客户记一笔“应收账款”
+        if (flag && "成品".equals(inv.getItemType()) && inv.getPurchasePrice() != null) {
+            org.dromara.system.domain.BizFinanceRecord finance = new org.dromara.system.domain.BizFinanceRecord();
+            finance.setRecordNo("FIN-XS-" + System.currentTimeMillis());
+            finance.setRecordType("1"); // 1-收入/应收 (客户欠我们的钱)
+            finance.setBusinessType("销售出货");
+            finance.setRelatedNo(inv.getUniqueCode()); // 把工单号带过去作为凭证
+            finance.setAmount(outboundQty.multiply(inv.getPurchasePrice())); // 出货量 * 售价
+            finance.setSettlementStatus("0"); // 未结清(挂账)
+
+            // 查询真实的客户公司名称 (当初排产入库时，我们把customerId存在了supplierId字段里)
+            String targetName = String.valueOf(inv.getSupplierId());
+            if (inv.getSupplierId() != null) {
+                org.dromara.system.domain.BizCustomer customer = customerMapper.selectById(inv.getSupplierId());
+                if (customer != null && customer.getCompanyName() != null) {
+                    targetName = customer.getCompanyName();
+                }
+            }
+            finance.setTargetName(targetName);
+            finance.setRemark("成品出货自动生成应收账款，出货产品: " + inv.getItemName() + "，出货量: " + outboundQty);
+
+            financeRecordMapper.insert(finance);
+        }
+
+        return flag;
     }
 }

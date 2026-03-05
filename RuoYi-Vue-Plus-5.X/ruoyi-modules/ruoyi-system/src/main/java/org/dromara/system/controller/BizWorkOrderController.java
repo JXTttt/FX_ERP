@@ -6,6 +6,9 @@ import lombok.RequiredArgsConstructor;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.constraints.*;
 import cn.dev33.satoken.annotation.SaCheckPermission;
+import org.dromara.system.domain.BizOutsourcingReceipt;
+import org.dromara.system.mapper.BizOutsourcingReceiptMapper;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.validation.annotation.Validated;
 import org.dromara.common.idempotent.annotation.RepeatSubmit;
@@ -35,6 +38,9 @@ import org.dromara.common.mybatis.core.page.TableDataInfo;
 public class BizWorkOrderController extends BaseController {
 
     private final IBizWorkOrderService bizWorkOrderService;
+    @SuppressWarnings("SpringJavaInjectionPointsAutowiringInspection")
+    @Autowired
+    private org.dromara.system.mapper.BizOutsourcingReceiptMapper outsourcingReceiptMapper;
 
     /**
      * 查询工单管理列表
@@ -111,6 +117,30 @@ public class BizWorkOrderController extends BaseController {
     @PutMapping("/audit")
     public R<Void> audit(@RequestBody BizWorkOrderBo bo) {
         return toAjax(bizWorkOrderService.auditWorkOrder(bo));
+    }
+
+    /**
+     * 一键推送委外加工单到收货表
+     */
+    @SaCheckPermission("erp:workOrder:edit")
+    @Log(title = "委外发货推送", businessType = BusinessType.INSERT)
+    @PostMapping("/pushOutsourcing")
+    public R<Void> pushOutsourcing(@RequestBody org.dromara.system.domain.BizOutsourcingReceipt receipt) {
+        // 生成唯一的收货单号
+        receipt.setReceiptNo("OSR" + System.currentTimeMillis());
+        // 强制设置初始状态为 "0-待入库"
+        receipt.setStatus("0");
+
+        // 避免前端传过来的 null 值导致保存报错
+        if (receipt.getUnitPrice() == null) {
+            receipt.setUnitPrice(java.math.BigDecimal.ZERO);
+        }
+        if (receipt.getTotalFee() == null) {
+            receipt.setTotalFee(java.math.BigDecimal.ZERO);
+        }
+
+        outsourcingReceiptMapper.insert(receipt);
+        return R.ok();
     }
 }
 

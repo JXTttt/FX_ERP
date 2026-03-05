@@ -1,5 +1,5 @@
 <template>
-  <div class="p-2">
+  <div class="p-2 app-container">
     <transition
       :enter-active-class="proxy?.animate.searchAnimate.enter"
       :leave-active-class="proxy?.animate.searchAnimate.leave"
@@ -21,7 +21,7 @@
                 v-model="queryParams.contactPerson"
                 placeholder="请输入联系人姓名"
                 clearable
-                style="width: 200px"
+                style="width: 150px"
                 @keyup.enter="handleQuery"
               />
             </el-form-item>
@@ -30,7 +30,7 @@
                 v-model="queryParams.contactPhone"
                 placeholder="请输入联系人手机号"
                 clearable
-                style="width: 200px"
+                style="width: 180px"
                 @keyup.enter="handleQuery"
               />
             </el-form-item>
@@ -47,51 +47,12 @@
       <template #header>
         <el-row :gutter="10" class="mb8">
           <el-col :span="1.5">
-            <el-button
-              type="primary"
-              plain
-              icon="Plus"
-              @click="handleAdd"
-              v-hasPermi="['erp:customer:add']"
-              >新增</el-button
-            >
+            <el-button type="primary" plain icon="Plus" @click="handleAdd" v-hasPermi="['erp:customer:add']">新增客户/供应商</el-button>
           </el-col>
           <el-col :span="1.5">
-            <el-button
-              type="success"
-              plain
-              icon="Edit"
-              :disabled="single"
-              @click="handleUpdate()"
-              v-hasPermi="['erp:customer:edit']"
-              >修改</el-button
-            >
+            <el-button type="warning" plain icon="Download" @click="handleExport" v-hasPermi="['erp:customer:export']">导出档案表格</el-button>
           </el-col>
-          <el-col :span="1.5">
-            <el-button
-              type="danger"
-              plain
-              icon="Delete"
-              :disabled="multiple"
-              @click="handleDelete()"
-              v-hasPermi="['erp:customer:remove']"
-              >删除</el-button
-            >
-          </el-col>
-          <el-col :span="1.5">
-            <el-button
-              type="warning"
-              plain
-              icon="Download"
-              @click="handleExport"
-              v-hasPermi="['erp:customer:export']"
-              >导出</el-button
-            >
-          </el-col>
-          <right-toolbar
-            v-model:showSearch="showSearch"
-            @queryTable="getList"
-          ></right-toolbar>
+          <right-toolbar v-model:showSearch="showSearch" @queryTable="getList"></right-toolbar>
         </el-row>
       </template>
 
@@ -102,15 +63,15 @@
         @selection-change="handleSelectionChange"
       >
         <el-table-column type="selection" width="55" align="center" />
-        <el-table-column
-          label="客户名称"
-          align="center"
-          prop="companyName"
-          min-width="150"
-          :show-overflow-tooltip="true"
-        />
+        
+        <el-table-column label="客户/公司全称" align="left" prop="companyName" min-width="180" show-overflow-tooltip>
+          <template #default="scope">
+             <strong style="color: #303133">{{ scope.row.companyName }}</strong>
+          </template>
+        </el-table-column>
+
         <el-table-column label="联系人" align="center" prop="contactPerson" width="100" />
-        <el-table-column label="手机号" align="center" prop="contactPhone" width="120" />
+        <el-table-column label="手机号" align="center" prop="contactPhone" width="130" />
 
         <el-table-column label="类型" align="center" prop="customerType" width="100">
           <template #default="scope">
@@ -118,43 +79,16 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="供应分类" align="center" prop="supplierCategory" min-width="120">
+        <el-table-column label="供应分类" align="center" prop="supplierCategory" min-width="150">
           <template #default="scope">
-            <dict-tag 
-              :options="erp_supplier_category" 
-              :value="scope.row.supplierCategory ? scope.row.supplierCategory.split(',') : []" 
-            />
+            <dict-tag :options="erp_supplier_category" :value="scope.row.supplierCategory" />
           </template>
         </el-table-column>
 
-        <el-table-column
-          label="公司地址"
-          align="center"
-          min-width="200"
-          :show-overflow-tooltip="true"
-        >
+        <el-table-column label="公司地址" align="center" min-width="200" show-overflow-tooltip>
           <template #default="scope">
             <span>
-              {{ scope.row.companyProvince || "" }}
-              {{ scope.row.companyCity || "" }}
-              {{ scope.row.companyDistrict || "" }}
-              {{ scope.row.companyAddress || "" }}
-            </span>
-          </template>
-        </el-table-column>
-
-        <el-table-column
-          label="收货地址"
-          align="center"
-          min-width="200"
-          :show-overflow-tooltip="true"
-        >
-          <template #default="scope">
-            <span>
-              {{ scope.row.deliveryProvince || "" }}
-              {{ scope.row.deliveryCity || "" }}
-              {{ scope.row.deliveryDistrict || "" }}
-              {{ scope.row.deliveryAddress || "" }}
+              {{ scope.row.companyProvince || "" }}{{ scope.row.companyCity || "" }}{{ scope.row.companyDistrict || "" }}{{ scope.row.companyAddress || "" }}
             </span>
           </template>
         </el-table-column>
@@ -166,97 +100,49 @@
               placement="top"
               title="账户详情"
               :width="300"
-              trigger="click"
+              trigger="hover"
               :content="scope.row.bankAccountInfo"
             >
               <template #reference>
                 <el-button link type="primary" icon="View">查看</el-button>
               </template>
             </el-popover>
-            <span v-else>-</span>
+            <span v-else style="color: #C0C4CC; font-size: 12px;">未录入</span>
           </template>
         </el-table-column>
 
-        <el-table-column
-          label="交易总额"
-          align="center"
-          prop="totalDealAmount"
-          width="120"
-        />
-        <el-table-column
-          label="当前欠款"
-          align="center"
-          prop="totalOweAmount"
-          width="120"
-        >
+        <el-table-column label="交易总额" align="center" prop="totalDealAmount" width="120">
           <template #default="scope">
-            <span :style="scope.row.totalOweAmount > 0 ? 'color: red' : ''">{{
-              scope.row.totalOweAmount
-            }}</span>
+             <span style="font-weight: bold; color: #606266;">￥{{ Number(scope.row.totalDealAmount || 0).toFixed(2) }}</span>
+          </template>
+        </el-table-column>
+        
+        <el-table-column label="当前欠款/待付" align="center" prop="totalOweAmount" width="140">
+          <template #default="scope">
+            <span v-if="Number(scope.row.totalOweAmount) > 0" style="color: #F56C6C; font-weight: bold;">
+              ￥{{ Number(scope.row.totalOweAmount).toFixed(2) }}
+            </span>
+            <span v-else style="color: #67C23A;">￥0.00</span>
           </template>
         </el-table-column>
 
-        <el-table-column
-          label="操作"
-          align="center"
-          width="220"
-          fixed="right"
-          class-name="small-padding fixed-width"
-        >
+        <el-table-column label="操作" align="center" width="220" fixed="right" class-name="small-padding fixed-width">
           <template #default="scope">
-            <el-button
-              link
-              type="primary"
-              icon="View"
-              @click="handleView(scope.row)"
-              v-hasPermi="['erp:customer:query']"
-              >详情</el-button
-            >
-            <el-button
-              link
-              type="primary"
-              icon="Edit"
-              @click="handleUpdate(scope.row)"
-              v-hasPermi="['erp:customer:edit']"
-              >修改</el-button
-            >
-            <el-button
-              link
-              type="primary"
-              icon="Delete"
-              @click="handleDelete(scope.row)"
-              v-hasPermi="['erp:customer:remove']"
-              >删除</el-button
-            >
+            <el-button link type="success" icon="View" @click="handleView(scope.row)" v-hasPermi="['erp:customer:query']">详情</el-button>
+            <el-button link type="primary" icon="Edit" @click="handleUpdate(scope.row)" v-hasPermi="['erp:customer:edit']">修改</el-button>
+            <el-button link type="danger" icon="Delete" @click="handleDelete(scope.row)" v-hasPermi="['erp:customer:remove']">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
 
-      <pagination
-        v-show="total > 0"
-        :total="total"
-        v-model:page="queryParams.pageNum"
-        v-model:limit="queryParams.pageSize"
-        @pagination="getList"
-      />
+      <pagination v-show="total > 0" :total="total" v-model:page="queryParams.pageNum" v-model:limit="queryParams.pageSize" @pagination="getList" />
     </el-card>
 
-    <el-dialog
-      :title="dialog.title"
-      v-model="dialog.visible"
-      width="800px"
-      append-to-body
-    >
-      <el-form
-        ref="customerFormRef"
-        :model="form"
-        :rules="rules"
-        label-width="110px"
-        :disabled="isView"
-      >
+    <el-dialog :title="dialog.title" v-model="dialog.visible" width="800px" append-to-body>
+      <el-form ref="customerFormRef" :model="form" :rules="rules" label-width="110px" :disabled="isView">
         <el-row :gutter="20">
           <el-col :span="12">
-            <el-form-item label="客户公司全称" prop="companyName">
+            <el-form-item label="客户/公司全称" prop="companyName">
               <el-input v-model="form.companyName" placeholder="请输入客户公司全称" />
             </el-form-item>
           </el-col>
@@ -271,18 +157,9 @@
             </el-form-item>
           </el-col>
           <el-col :span="12">
-            <el-form-item label="客户类型" prop="customerType">
-              <el-select
-                v-model="form.customerType"
-                placeholder="请选择类型"
-                style="width: 100%"
-              >
-                <el-option
-                  v-for="dict in erp_customer_type"
-                  :key="dict.value"
-                  :label="dict.label"
-                  :value="dict.value"
-                ></el-option>
+            <el-form-item label="类型" prop="customerType">
+              <el-select v-model="form.customerType" placeholder="请选择类型" style="width: 100%">
+                <el-option v-for="dict in erp_customer_type" :key="dict.value" :label="dict.label" :value="dict.value" />
               </el-select>
             </el-form-item>
           </el-col>
@@ -296,12 +173,7 @@
                 style="width: 100%"
                 clearable
               >
-                <el-option
-                  v-for="dict in erp_supplier_category"
-                  :key="dict.value"
-                  :label="dict.label"
-                  :value="dict.value"
-                />
+                <el-option v-for="dict in erp_supplier_category" :key="dict.value" :label="dict.label" :value="dict.value" />
               </el-select>
             </el-form-item>
           </el-col>
@@ -325,8 +197,7 @@
                 :options="(pcaTextArr as any)"
                 placeholder="请选择省/市/区"
                 style="width: 100%"
-                clearable
-                filterable
+                clearable filterable
                 @change="handleCompanyRegionChange"
               />
             </el-form-item>
@@ -345,8 +216,7 @@
                 :options="(pcaTextArr as any)"
                 placeholder="请选择省/市/区"
                 style="width: 100%"
-                clearable
-                filterable
+                clearable filterable
                 @change="handleDeliveryRegionChange"
               />
             </el-form-item>
@@ -365,10 +235,7 @@
           <el-divider content-position="left">其他信息</el-divider>
           <el-col :span="24">
             <el-form-item label="银行账户" prop="bankAccountInfo">
-              <el-input
-                v-model="form.bankAccountInfo"
-                placeholder="例:工行 张三 6212..."
-              />
+              <el-input v-model="form.bankAccountInfo" placeholder="例:工行 张三 6212..." />
             </el-form-item>
           </el-col>
           <el-col :span="24">
@@ -385,13 +252,7 @@
       </el-form>
       <template #footer>
         <div class="dialog-footer">
-          <el-button
-            :loading="buttonLoading"
-            type="primary"
-            @click="submitForm"
-            v-if="!isView"
-            >确 定</el-button
-          >
+          <el-button :loading="buttonLoading" type="primary" @click="submitForm" v-if="!isView">确 定</el-button>
           <el-button @click="cancel">{{ isView ? "关 闭" : "取 消" }}</el-button>
         </div>
       </template>
@@ -400,18 +261,12 @@
 </template>
 
 <script setup name="Customer" lang="ts">
-import {
-  listCustomer,
-  getCustomer,
-  delCustomer,
-  addCustomer,
-  updateCustomer,
-} from "@/api/erp/customer";
+import { listCustomer, getCustomer, delCustomer, addCustomer, updateCustomer } from "@/api/erp/customer";
 import { CustomerVO, CustomerQuery, CustomerForm } from "@/api/erp/customer/types";
 import { pcaTextArr } from "element-china-area-data";
+import { ComponentInternalInstance, getCurrentInstance, onMounted, reactive, ref, toRefs } from 'vue';
 
 const { proxy } = getCurrentInstance() as ComponentInternalInstance;
-// 🔥 新增引入 erp_supplier_category 字典
 const { erp_customer_type, erp_supplier_category } = toRefs<any>(proxy?.useDict("erp_customer_type", "erp_supplier_category"));
 
 const customerList = ref<CustomerVO[]>([]);
@@ -427,15 +282,14 @@ const isView = ref(false);
 const companyRegion = ref<string[]>([]); 
 const deliveryRegion = ref<string[]>([]); 
 
-const queryFormRef = ref<ElFormInstance>();
-const customerFormRef = ref<ElFormInstance>();
+const queryFormRef = ref<any>();
+const customerFormRef = ref<any>();
 
-const dialog = reactive<DialogOption>({
+const dialog = reactive({
   visible: false,
   title: "",
 });
 
-// 🔥 改用 any 以兼容我们手动新增的 supplierCategory 字段
 const initFormData: any = {
   companyName: undefined,
   customerCode: undefined,
@@ -443,7 +297,7 @@ const initFormData: any = {
   contactPerson: undefined,
   contactPhone: undefined,
   customerType: undefined,
-  supplierCategory: [], // 初始化为空数组
+  supplierCategory: [], 
   companyProvince: undefined,
   companyCity: undefined,
   companyDistrict: undefined,
@@ -458,7 +312,7 @@ const initFormData: any = {
   remark: undefined,
 };
 
-const data = reactive<PageData<any, CustomerQuery>>({
+const data = reactive<any>({
   form: { ...initFormData },
   queryParams: {
     pageNum: 1,
@@ -466,28 +320,7 @@ const data = reactive<PageData<any, CustomerQuery>>({
     companyName: undefined,
     contactPerson: undefined,
     contactPhone: undefined,
-    id: undefined,
-    customerCode: undefined,
-    shortName: undefined,
     customerType: undefined,
-    companyProvince: undefined,
-    companyCity: undefined,
-    companyDistrict: undefined,
-    companyAddress: undefined,
-    deliveryProvince: undefined,
-    deliveryCity: undefined,
-    deliveryDistrict: undefined,
-    deliveryAddress: undefined,
-    deliveryUnit: undefined,
-    bankAccountInfo: undefined,
-    totalDealAmount: undefined,
-    totalOweAmount: undefined,
-    salesManId: undefined,
-    createBy: undefined,
-    createTime: undefined,
-    updateBy: undefined,
-    updateTime: undefined,
-    params: {},
   },
   rules: {
     companyName: [{ required: true, message: "客户公司全称不能为空", trigger: "blur" }],
@@ -573,7 +406,6 @@ const handleUpdate = async (row?: CustomerVO) => {
   const res = await getCustomer(_id);
   Object.assign(form.value, res.data);
   
-  // 🔥 字符串转数组 (例如 "1,2" -> ['1', '2'])
   if (form.value.supplierCategory && typeof form.value.supplierCategory === 'string') {
     form.value.supplierCategory = form.value.supplierCategory.split(',');
   } else {
@@ -603,7 +435,6 @@ const handleView = async (row?: CustomerVO) => {
   const res = await getCustomer(_id);
   Object.assign(form.value, res.data);
 
-  // 🔥 查看时同样需要转换格式
   if (form.value.supplierCategory && typeof form.value.supplierCategory === 'string') {
     form.value.supplierCategory = form.value.supplierCategory.split(',');
   } else {
@@ -625,8 +456,6 @@ const submitForm = () => {
   customerFormRef.value?.validate(async (valid: boolean) => {
     if (valid) {
       buttonLoading.value = true;
-      
-      // 🔥 提交前将数组转换为逗号分隔的字符串
       const submitData = { ...form.value };
       if (Array.isArray(submitData.supplierCategory)) {
           submitData.supplierCategory = submitData.supplierCategory.join(',');
@@ -655,12 +484,13 @@ const handleDelete = async (row?: CustomerVO) => {
 };
 
 const handleExport = () => {
+  // 隔离查询参数，安全导出
+  const exportParams: any = JSON.parse(JSON.stringify(queryParams.value));
+  exportParams.params = undefined; 
   proxy?.download(
     "erp/customer/export",
-    {
-      ...queryParams.value,
-    },
-    `customer_${new Date().getTime()}.xlsx`
+    exportParams,
+    `客户档案导出_${new Date().getTime()}.xlsx`
   );
 };
 

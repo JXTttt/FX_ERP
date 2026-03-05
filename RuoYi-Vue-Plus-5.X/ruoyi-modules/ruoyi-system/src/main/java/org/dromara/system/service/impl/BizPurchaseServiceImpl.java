@@ -9,6 +9,9 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.dromara.system.mapper.BizCustomerMapper;
+import org.dromara.system.mapper.BizFinanceRecordMapper;
+import org.dromara.system.mapper.BizInventoryMapper;
 import org.springframework.stereotype.Service;
 import org.dromara.system.domain.bo.BizPurchaseBo;
 import org.dromara.system.domain.vo.BizPurchaseVo;
@@ -35,7 +38,15 @@ public class BizPurchaseServiceImpl implements IBizPurchaseService {
     private final BizPurchaseMapper baseMapper;
 
     @SuppressWarnings("SpringJavaInjectionPointsAutowiringInspection")
-    private final org.dromara.system.mapper.BizInventoryMapper inventoryMapper;
+    private final BizInventoryMapper inventoryMapper;
+
+    // 财务流水 Mapper
+    @SuppressWarnings("SpringJavaInjectionPointsAutowiringInspection")
+    private final BizFinanceRecordMapper financeRecordMapper;
+
+    // 注入客户/供应商 Mapper（用来查供应商名字）
+    @SuppressWarnings("SpringJavaInjectionPointsAutowiringInspection")
+    private final BizCustomerMapper customerMapper;
 
     @Override
     public BizPurchaseVo queryById(Long id){
@@ -51,8 +62,27 @@ public class BizPurchaseServiceImpl implements IBizPurchaseService {
 
     @Override
     public List<BizPurchaseVo> queryList(BizPurchaseBo bo) {
-        LambdaQueryWrapper<BizPurchase> lqw = buildQueryWrapper(bo);
-        return baseMapper.selectVoList(lqw);
+        com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<BizPurchase> lqw = buildQueryWrapper(bo);
+        List<BizPurchaseVo> list = baseMapper.selectVoList(lqw);
+
+        // ================= 核心翻译逻辑：导出时展示供应商真实名称 =================
+        for (BizPurchaseVo vo : list) {
+            if (vo.getSupplierId() != null) {
+                try {
+                    org.dromara.system.domain.BizCustomer customer = customerMapper.selectById(vo.getSupplierId());
+                    if (customer != null) {
+                        vo.setSupplierName(customer.getCompanyName());
+                    } else {
+                        vo.setSupplierName("未知供应商");
+                    }
+                } catch (Exception e) {
+                    vo.setSupplierName("解析失败");
+                }
+            }
+        }
+        // =====================================================================
+
+        return list;
     }
 
     private LambdaQueryWrapper<BizPurchase> buildQueryWrapper(BizPurchaseBo bo) {
@@ -147,6 +177,33 @@ public class BizPurchaseServiceImpl implements IBizPurchaseService {
             inv.setTotalAmount(incomingQty.multiply(safePrice));
             inventoryMapper.insert(inv);
         }
+
+        // ================= 下面是新增的业财联动代码 =================
+        java.math.BigDecimal totalMoney = incomingQty.multiply(safePrice);
+        // 只有当金额大于0时，才产生财务账单
+        if (totalMoney.compareTo(java.math.BigDecimal.ZERO) > 0) {
+            org.dromara.system.domain.BizFinanceRecord finance = new org.dromara.system.domain.BizFinanceRecord();
+            finance.setRecordNo("FIN-CG-" + System.currentTimeMillis());
+            finance.setRecordType("2"); // 2-支出/应付
+            finance.setBusinessType("采购入库");
+            finance.setRelatedNo(bo.getPurchaseNo());
+            finance.setAmount(totalMoney);
+            finance.setSettlementStatus("0"); // 默认未结清(挂账)
+
+            // 查询真实的供应商公司名称
+            String targetName = String.valueOf(bo.getSupplierId());
+            if (bo.getSupplierId() != null) {
+                org.dromara.system.domain.BizCustomer customer = customerMapper.selectById(bo.getSupplierId());
+                if (customer != null && customer.getCompanyName() != null) {
+                    targetName = customer.getCompanyName();
+                }
+            }
+            finance.setTargetName(targetName);
+            finance.setRemark("采购验收自动产生应付款，物资: " + bo.getItemName() + "，数量: " + incomingQty);
+
+            financeRecordMapper.insert(finance);
+        }
+        // =========================================================
     }
 
     private void validEntityBeforeSave(BizPurchase entity){

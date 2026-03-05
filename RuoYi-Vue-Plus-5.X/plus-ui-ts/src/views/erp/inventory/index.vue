@@ -1,22 +1,22 @@
 <template>
-  <div class="p-2">
+  <div class="p-2 app-container">
     <transition :enter-active-class="proxy?.animate.searchAnimate.enter" :leave-active-class="proxy?.animate.searchAnimate.leave">
       <div v-show="showSearch" class="mb-[10px]">
         <el-card shadow="hover">
           <el-form ref="queryFormRef" :model="queryParams" :inline="true">
             <el-form-item label="专用码" prop="uniqueCode">
-              <el-input v-model="queryParams.uniqueCode" placeholder="请输入专用码" clearable @keyup.enter="handleQuery" />
+              <el-input v-model="queryParams.uniqueCode" placeholder="请输入专用码" clearable @keyup.enter="handleQuery" style="width: 150px" />
             </el-form-item>
             <el-form-item label="类型" prop="itemType">
-              <el-select v-model="queryParams.itemType" placeholder="请选择类型" clearable style="width: 150px">
+              <el-select v-model="queryParams.itemType" placeholder="请选择类型" clearable style="width: 120px">
                 <el-option v-for="dict in erp_item_type" :key="dict.value" :label="dict.label" :value="dict.value"/>
               </el-select>
             </el-form-item>
             <el-form-item label="物料名称" prop="itemName">
-              <el-input v-model="queryParams.itemName" placeholder="请输入物料名称" clearable @keyup.enter="handleQuery" />
+              <el-input v-model="queryParams.itemName" placeholder="请输入物料名称" clearable @keyup.enter="handleQuery" style="width: 180px" />
             </el-form-item>
             <el-form-item label="规格" prop="spec">
-              <el-input v-model="queryParams.spec" placeholder="请输入规格" clearable @keyup.enter="handleQuery" />
+              <el-input v-model="queryParams.spec" placeholder="请输入规格" clearable @keyup.enter="handleQuery" style="width: 150px" />
             </el-form-item>
             
             <el-form-item>
@@ -32,16 +32,10 @@
       <template #header>
         <el-row :gutter="10" class="mb8">
           <el-col :span="1.5">
-            <el-button type="primary" plain icon="Plus" @click="handleAdd" v-hasPermi="['erp:inventory:add']">新增</el-button>
+            <el-button type="primary" plain icon="Plus" @click="handleAdd" v-hasPermi="['erp:inventory:add']">新增库存</el-button>
           </el-col>
           <el-col :span="1.5">
-            <el-button type="success" plain icon="Edit" :disabled="single" @click="handleUpdate()" v-hasPermi="['erp:inventory:edit']">修改</el-button>
-          </el-col>
-          <el-col :span="1.5">
-            <el-button type="danger" plain icon="Delete" :disabled="multiple" @click="handleDelete()" v-hasPermi="['erp:inventory:remove']">删除</el-button>
-          </el-col>
-          <el-col :span="1.5">
-            <el-button type="warning" plain icon="Download" @click="handleExport" v-hasPermi="['erp:inventory:export']">导出</el-button>
+            <el-button type="warning" plain icon="Download" @click="handleExport" v-hasPermi="['erp:inventory:export']">导出盘点表</el-button>
           </el-col>
           <right-toolbar v-model:showSearch="showSearch" @queryTable="getList"></right-toolbar>
         </el-row>
@@ -49,33 +43,58 @@
 
       <el-table v-loading="loading" border :data="inventoryList" @selection-change="handleSelectionChange">
         <el-table-column type="selection" width="55" align="center" />
-        <el-table-column label="专用码" align="center" prop="uniqueCode" width="120" />
+        <el-table-column label="专用码" align="center" prop="uniqueCode" width="140" />
         <el-table-column label="类型" align="center" prop="itemType" width="100">
           <template #default="scope">
             <dict-tag :options="erp_item_type" :value="scope.row.itemType"/>
           </template>
         </el-table-column>
-        <el-table-column label="物料名称" align="center" prop="itemName" min-width="150" :show-overflow-tooltip="true" />
-        <el-table-column label="规格" align="center" prop="spec" min-width="120" />
-        <el-table-column label="库存量" align="center" prop="currentQty" />
-        <el-table-column label="单位" align="center" prop="unit">
+        <el-table-column label="物料名称" align="center" prop="itemName" min-width="180" :show-overflow-tooltip="true">
+           <template #default="scope">
+             <strong style="color: #303133">{{ scope.row.itemName }}</strong>
+          </template>
+        </el-table-column>
+        <el-table-column label="规格" align="center" prop="spec" min-width="120">
+           <template #default="scope">
+             <span v-if="scope.row.spec">{{ scope.row.spec }}</span>
+             <span v-else style="color: #C0C4CC;">-</span>
+          </template>
+        </el-table-column>
+        
+        <el-table-column label="当前库存量" align="center" prop="currentQty" width="120">
+           <template #default="scope">
+             <span style="font-size: 16px; font-weight: bold; color: #409EFF;">{{ scope.row.currentQty }}</span>
+          </template>
+        </el-table-column>
+        
+        <el-table-column label="单位" align="center" prop="unit" width="80">
           <template #default="scope">
             <dict-tag :options="erp_item_unit" :value="scope.row.unit"/>
           </template>
         </el-table-column>
         
-        <el-table-column label="供应商/客户" align="center" prop="supplierId" min-width="150" :show-overflow-tooltip="true">
+        <el-table-column label="供应商/客户" align="center" prop="supplierId" min-width="180" :show-overflow-tooltip="true">
           <template #default="scope">
-             <span>{{ supplierOptions.find(opt => opt.id === scope.row.supplierId)?.companyName || scope.row.supplierId }}</span>
+             <span v-if="scope.row.supplierId">{{ supplierOptions.find(opt => opt.id === scope.row.supplierId)?.companyName || scope.row.supplierId }}</span>
+             <span v-else style="color: #C0C4CC;">-</span>
           </template>
         </el-table-column>
         
-        <el-table-column label="采购单价" align="center" prop="purchasePrice" />
-        <el-table-column label="总金额" align="center" prop="totalAmount" />
+        <el-table-column label="采购单价" align="center" prop="purchasePrice" width="110">
+           <template #default="scope">
+             <span v-if="scope.row.purchasePrice != null" style="color: #606266;">￥{{ Number(scope.row.purchasePrice).toFixed(4) }}</span>
+             <span v-else style="color: #C0C4CC;">-</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="库存总额" align="center" prop="totalAmount" width="130">
+           <template #default="scope">
+             <span v-if="scope.row.totalAmount != null" style="color: #F56C6C; font-weight: bold;">￥{{ Number(scope.row.totalAmount).toFixed(2) }}</span>
+             <span v-else style="color: #C0C4CC;">-</span>
+          </template>
+        </el-table-column>
         
         <el-table-column label="操作" align="center" fixed="right" width="160" class-name="small-padding fixed-width">
           <template #default="scope">
-            
             <el-tooltip content="出货" placement="top" v-if="isFinishedGood(scope.row.itemType) && Number(scope.row.currentQty) > 0">
               <el-button link type="warning" icon="Van" @click="handleOutbound(scope.row)"></el-button>
             </el-tooltip>
@@ -84,7 +103,7 @@
               <el-button link type="primary" icon="Edit" @click="handleUpdate(scope.row)" v-hasPermi="['erp:inventory:edit']"></el-button>
             </el-tooltip>
             <el-tooltip content="删除" placement="top">
-              <el-button link type="primary" icon="Delete" @click="handleDelete(scope.row)" v-hasPermi="['erp:inventory:remove']"></el-button>
+              <el-button link type="danger" icon="Delete" @click="handleDelete(scope.row)" v-hasPermi="['erp:inventory:remove']"></el-button>
             </el-tooltip>
           </template>
         </el-table-column>
@@ -196,7 +215,7 @@ import { ref, reactive, toRefs, onMounted, getCurrentInstance, ComponentInternal
 import { listInventory, getInventory, delInventory, addInventory, updateInventory } from '@/api/erp/inventory';
 import { InventoryVO, InventoryQuery, InventoryForm } from '@/api/erp/inventory/types';
 import { listCustomer } from '@/api/erp/customer';
-import request from '@/utils/request'; // 👉 新增：引入 request 工具用于发送出货请求
+import request from '@/utils/request';
 import { ElForm } from 'element-plus';
 
 type ElFormInstance = InstanceType<typeof ElForm>;
@@ -225,7 +244,6 @@ const dialog = reactive<DialogOption>({
   title: ''
 });
 
-// 👉 新增：出货弹窗状态数据
 const outboundDialog = ref({
   open: false,
   loading: false,
@@ -272,16 +290,13 @@ const data = reactive<PageData<InventoryForm, InventoryQuery>>({
 const { queryParams, form, rules } = toRefs(data);
 
 const getSupplierList = async () => {
-  // 👉 删除了 customerType 限制，加载所有客户和供应商用于名字反显
   const res = await listCustomer({ pageNum: 1, pageSize: 2000 } as any);
   supplierOptions.value = res.rows;
 }
 
-// 👉 新增：判断是否为成品（兼容字典数字值和中文文字）
 const isFinishedGood = (val: any) => {
   if (!val) return false;
   if (val === '成品') return true;
-  // 如果存的是字典的 ID（如 '1', '2'）
   const dictItem = erp_item_type.value?.find((item: any) => item.value == val);
   return dictItem && dictItem.label === '成品';
 }
@@ -366,12 +381,11 @@ const handleDelete = async (row?: InventoryVO) => {
 }
 
 const handleExport = () => {
-  proxy?.download('erp/inventory/export', {
-    ...queryParams.value
-  }, `inventory_${new Date().getTime()}.xlsx`)
+  const exportParams: any = JSON.parse(JSON.stringify(queryParams.value));
+  exportParams.params = undefined; 
+  proxy?.download('erp/inventory/export', exportParams, `库存盘点表_${new Date().getTime()}.xlsx`)
 }
 
-// 👉 新增：打开出货弹窗
 function handleOutbound(row: any) {
   outboundDialog.value = {
     open: true,
@@ -384,7 +398,6 @@ function handleOutbound(row: any) {
   };
 }
 
-// 👉 新增：提交出货请求
 function submitOutbound() {
   outboundDialog.value.loading = true;
   request({
@@ -392,12 +405,12 @@ function submitOutbound() {
     method: 'post',
     data: {
       id: outboundDialog.value.id,
-      currentQty: outboundDialog.value.outboundQty // 借用 currentQty 传扣减量
+      currentQty: outboundDialog.value.outboundQty 
     }
   }).then(() => {
     proxy?.$modal.msgSuccess("出货扣减成功！");
     outboundDialog.value.open = false;
-    getList(); // 刷新列表
+    getList(); 
   }).finally(() => {
     outboundDialog.value.loading = false;
   });
