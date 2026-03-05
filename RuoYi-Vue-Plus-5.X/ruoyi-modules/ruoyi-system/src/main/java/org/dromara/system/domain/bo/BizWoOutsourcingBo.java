@@ -8,6 +8,8 @@ import io.github.linpeilie.annotations.AutoMapper;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import jakarta.validation.constraints.*;
+
+import java.math.BigDecimal;
 import java.util.Date;
 import com.fasterxml.jackson.annotation.JsonFormat;
 
@@ -55,7 +57,7 @@ public class BizWoOutsourcingBo extends BaseEntity {
     /**
      * 加工数量
      */
-    private Long processQty;
+    private BigDecimal processQty;
 
     /**
      * 计算单位
@@ -65,17 +67,17 @@ public class BizWoOutsourcingBo extends BaseEntity {
     /**
      * 加工单价
      */
-    private Long unitPrice;
+    private BigDecimal unitPrice;
 
     /**
      * 加工总价
      */
-    private Long totalPrice;
+    private BigDecimal totalPrice;
 
     /**
      * 附加费用
      */
-    private Long extraFee;
+    private BigDecimal extraFee;
 
     /**
      * 交货期
@@ -88,4 +90,33 @@ public class BizWoOutsourcingBo extends BaseEntity {
     private String remark;
 
 
+    /**
+     * 材料名称
+     */
+    private String materialName;
+
+    /**
+     * 长(mm)
+     */
+    private BigDecimal length;
+
+    /**
+     * 宽(mm)
+     */
+    private BigDecimal width;
+
+    /**
+     * 材料数量
+     */
+    private Long materialQty;
+
+    /**
+     * 需生产良品数量
+     */
+    private Long goodQty;
+
+    /**
+     * 单价计算方式(如:平方米,张,套)
+     */
+    private String priceMethod;
 }

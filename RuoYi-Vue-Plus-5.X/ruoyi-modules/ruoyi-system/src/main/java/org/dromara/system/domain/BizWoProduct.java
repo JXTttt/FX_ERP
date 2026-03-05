@@ -4,8 +4,11 @@ import org.dromara.common.mybatis.core.domain.BaseEntity;
 import com.baomidou.mybatisplus.annotation.*;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
+import com.fasterxml.jackson.annotation.JsonFormat;
 
 import java.io.Serial;
+import java.math.BigDecimal;
+import java.util.Date;
 
 /**
  * 工单产品明细子对象 biz_wo_product
@@ -22,7 +25,7 @@ public class BizWoProduct extends BaseEntity {
     private static final long serialVersionUID = 1L;
 
     /**
-     * 
+     * 主键ID
      */
     @TableId(value = "id")
     private Long id;
@@ -78,14 +81,19 @@ public class BizWoProduct extends BaseEntity {
     private String unit;
 
     /**
-     * 单价
+     * 单价 (👉 修复：对应数据库 decimal(10,4)，不能用 Long)
      */
-    private Long unitPrice;
+    private BigDecimal unitPrice;
 
     /**
-     * 总金额
+     * 总金额 (👉 修复：对应数据库 decimal(15,2)，不能用 Long)
      */
-    private Long totalAmount;
+    private BigDecimal totalAmount;
 
+    /**
+     * 专属交货日期 (👉 新增：支持同工单不同产品的分批交货)
+     */
+    @JsonFormat(pattern = "yyyy-MM-dd")
+    private Date deliveryDate;
 
 }

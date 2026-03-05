@@ -8,25 +8,29 @@ import io.github.linpeilie.annotations.AutoMapper;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import jakarta.validation.constraints.*;
+import java.math.BigDecimal;
+import java.util.Date;
+import com.fasterxml.jackson.annotation.JsonFormat;
 
 /**
  * 工单产品明细子业务对象 biz_wo_product
  *
  * @author JXTttt
- * @date 2026-02-14
  */
 @Data
 @EqualsAndHashCode(callSuper = true)
 @AutoMapper(target = BizWoProduct.class, reverseConvertGenerate = false)
 public class BizWoProductBo extends BaseEntity {
 
+    /**
+     * 主键ID
+     */
     @NotNull(message = "主键ID不能为空", groups = { EditGroup.class })
     private Long id;
 
     /**
      * 关联工单ID
      */
-    @NotNull(message = "关联工单ID不能为空", groups = { EditGroup.class })
     private Long workOrderId;
 
     /**
@@ -76,14 +80,19 @@ public class BizWoProductBo extends BaseEntity {
     private String unit;
 
     /**
-     * 单价
+     * 单价 (👉 必须改为 BigDecimal 以接收 0.00 格式)
      */
-    private Long unitPrice;
+    private BigDecimal unitPrice;
 
     /**
-     * 总金额
+     * 总金额 (👉 必须改为 BigDecimal 以接收 0.00 格式)
      */
-    private Long totalAmount;
+    private BigDecimal totalAmount;
 
+    /**
+     * 专属交货日期 (👉 必须同步新增，接收前端传来的独立交期)
+     */
+    @JsonFormat(pattern = "yyyy-MM-dd")
+    private Date deliveryDate;
 
 }

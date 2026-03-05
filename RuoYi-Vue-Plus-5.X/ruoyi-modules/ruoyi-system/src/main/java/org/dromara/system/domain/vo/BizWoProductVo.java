@@ -3,22 +3,19 @@ package org.dromara.system.domain.vo;
 import org.dromara.system.domain.BizWoProduct;
 import cn.idev.excel.annotation.ExcelIgnoreUnannotated;
 import cn.idev.excel.annotation.ExcelProperty;
-import org.dromara.common.excel.annotation.ExcelDictFormat;
-import org.dromara.common.excel.convert.ExcelDictConvert;
 import io.github.linpeilie.annotations.AutoMapper;
 import lombok.Data;
-import org.dromara.system.domain.vo.BizWoProductVo;
+import java.math.BigDecimal;
+import java.util.Date;
+import com.fasterxml.jackson.annotation.JsonFormat;
+
 import java.io.Serial;
 import java.io.Serializable;
-import java.util.Date;
-
-
 
 /**
  * 工单产品明细子视图对象 biz_wo_product
  *
  * @author JXTttt
- * @date 2026-02-14
  */
 @Data
 @ExcelIgnoreUnannotated
@@ -29,15 +26,13 @@ public class BizWoProductVo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     /**
-     *
+     * 主键ID
      */
-    @ExcelProperty(value = "")
     private Long id;
 
     /**
      * 关联工单ID
      */
-    @ExcelProperty(value = "关联工单ID")
     private Long workOrderId;
 
     /**
@@ -95,16 +90,22 @@ public class BizWoProductVo implements Serializable {
     private String unit;
 
     /**
-     * 单价
+     * 单价 (👉 必须同步改为 BigDecimal)
      */
     @ExcelProperty(value = "单价")
-    private Long unitPrice;
+    private BigDecimal unitPrice;
 
     /**
-     * 总金额
+     * 总金额 (👉 必须同步改为 BigDecimal)
      */
     @ExcelProperty(value = "总金额")
-    private Long totalAmount;
+    private BigDecimal totalAmount;
 
+    /**
+     * 专属交货日期 (👉 同步新增)
+     */
+    @ExcelProperty(value = "专属交货日期")
+    @JsonFormat(pattern = "yyyy-MM-dd")
+    private Date deliveryDate;
 
 }

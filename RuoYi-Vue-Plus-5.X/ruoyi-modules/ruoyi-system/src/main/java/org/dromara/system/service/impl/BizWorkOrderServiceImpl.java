@@ -7,7 +7,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.dromara.common.core.exception.ServiceException;
 import org.dromara.common.core.utils.MapstructUtils;
-import org.dromara.common.core.utils.SpringUtils;
 import org.dromara.common.core.utils.StringUtils;
 import org.dromara.common.mybatis.core.page.PageQuery;
 import org.dromara.common.mybatis.core.page.TableDataInfo;
@@ -34,11 +33,8 @@ import org.dromara.system.domain.BizWoPostProcess;
 import org.dromara.system.domain.BizWoExtraPurchase;
 import org.dromara.system.domain.BizWoProcess;
 import org.dromara.system.domain.BizWoOutsourcing;
-// 👉 新增：引入采购表
+// 引入采购表
 import org.dromara.system.domain.BizPurchase;
-
-// 引入子表Mapper
-// 👉 新增：引入采购Mapper
 
 import java.util.Collection;
 import java.util.List;
@@ -78,7 +74,7 @@ public class BizWorkOrderServiceImpl implements IBizWorkOrderService {
     private final BizScheduleNodeMapper scheduleNodeMapper;
     private final BizWoProductMapper woProductMapper;
 
-    // 👉 新增：注入采购单Mapper
+    // 注入采购单Mapper
     private final BizPurchaseMapper purchaseMapper;
 
     @Override
@@ -182,21 +178,32 @@ public class BizWorkOrderServiceImpl implements IBizWorkOrderService {
 
         if (bo.getProductList() != null && !bo.getProductList().isEmpty()) {
             List<BizWoProduct> list = MapstructUtils.convert(bo.getProductList(), BizWoProduct.class);
-            // 👉 过滤掉空行
             list = list.stream().filter(i -> StringUtils.isNotBlank(i.getProductName())).collect(java.util.stream.Collectors.toList());
             if(!list.isEmpty()) {
                 list.forEach(i -> { i.setWorkOrderId(woId); i.setId(null); });
                 productMapper.insertBatch(list);
             }
         }
+
+        // 保存材料清单：只要部件名或物料名填写了任意一个就不抛弃
         if (bo.getMaterialList() != null && !bo.getMaterialList().isEmpty()) {
             List<BizWoMaterial> list = MapstructUtils.convert(bo.getMaterialList(), BizWoMaterial.class);
-            list = list.stream().filter(i -> StringUtils.isNotBlank(i.getPartName())).collect(java.util.stream.Collectors.toList());
+            list = list.stream()
+                .filter(i -> StringUtils.isNotBlank(i.getPartName()) || StringUtils.isNotBlank(i.getPaperName()))
+                .collect(java.util.stream.Collectors.toList());
+
             if(!list.isEmpty()) {
-                list.forEach(i -> { i.setWorkOrderId(woId); i.setId(null); });
+                list.forEach(i -> {
+                    i.setWorkOrderId(woId);
+                    i.setId(null);
+                    if (StringUtils.isBlank(i.getPartName())) {
+                        i.setPartName("默认部件");
+                    }
+                });
                 materialMapper.insertBatch(list);
             }
         }
+
         if (bo.getCtpList() != null && !bo.getCtpList().isEmpty()) {
             List<BizWoCtp> list = MapstructUtils.convert(bo.getCtpList(), BizWoCtp.class);
             list.forEach(i -> { i.setWorkOrderId(woId); i.setId(null); });
@@ -212,14 +219,19 @@ public class BizWorkOrderServiceImpl implements IBizWorkOrderService {
             list.forEach(i -> { i.setWorkOrderId(woId); i.setId(null); });
             postProcessMapper.insertBatch(list);
         }
+
+        // 👉 新增保存其它订料
         if (bo.getExtraPurchaseList() != null && !bo.getExtraPurchaseList().isEmpty()) {
             List<BizWoExtraPurchase> list = MapstructUtils.convert(bo.getExtraPurchaseList(), BizWoExtraPurchase.class);
-            list.forEach(i -> { i.setWorkOrderId(woId); i.setId(null); });
-            extraPurchaseMapper.insertBatch(list);
+            list = list.stream().filter(i -> StringUtils.isNotBlank(i.getItemContent())).collect(java.util.stream.Collectors.toList());
+            if(!list.isEmpty()) {
+                list.forEach(i -> { i.setWorkOrderId(woId); i.setId(null); });
+                extraPurchaseMapper.insertBatch(list);
+            }
         }
+
         if (bo.getProcessList() != null && !bo.getProcessList().isEmpty()) {
             List<BizWoProcess> list = MapstructUtils.convert(bo.getProcessList(), BizWoProcess.class);
-            // 👉 过滤掉工序名为空的行（彻底解决你报错的问题）
             list = list.stream().filter(i -> StringUtils.isNotBlank(i.getProcessName())).collect(java.util.stream.Collectors.toList());
             if(!list.isEmpty()) {
                 list.forEach(i -> { i.setWorkOrderId(woId); i.setId(null); });
@@ -264,10 +276,10 @@ public class BizWorkOrderServiceImpl implements IBizWorkOrderService {
         if (flag && "2".equals(bo.getAuditStatus())) {
             // 1. 自动生成排产大表格子
             generateScheduleTasks(bo.getId());
-            // 2. 自动生成采购需求单 (来源: 订购)
+            // 2. 自动生成采购需求单 (👉 核心修改：只从“其它订料”生成)
             generatePurchaseOrders(bo.getId());
 
-            // 3. 👉 新增逻辑：自动扣减本厂原材料库存 (来源: 本厂)
+            // 3. 自动扣减本厂原材料库存 (来源: 本厂)
             deductInHouseMaterials(bo.getId());
         }
 
@@ -275,48 +287,43 @@ public class BizWorkOrderServiceImpl implements IBizWorkOrderService {
     }
 
     /**
-     * 根据工单材料清单，自动生成采购需求单
+     * 【重构】：根据“其它订料”清单统一生成采购需求单，不再读取原先的材料清单
      */
     private void generatePurchaseOrders(Long workOrderId) {
         // 1. 查询工单主表获取工单号
         BizWorkOrder wo = baseMapper.selectById(workOrderId);
         if (wo == null) return;
 
-        // 2. 精准查询该工单下，来源类型为“订购”的所有材料 (复用已注入的 materialMapper)
-        List<BizWoMaterial> materials = materialMapper.selectList(
-            new LambdaQueryWrapper<BizWoMaterial>()
-                .eq(BizWoMaterial::getWorkOrderId, workOrderId)
-                .eq(BizWoMaterial::getSourceType, "订购")
+        // 2. 直接查询该工单下的“其它订购(外发/采购集散地)”列表
+        List<BizWoExtraPurchase> extraPurchases = extraPurchaseMapper.selectList(
+            new LambdaQueryWrapper<BizWoExtraPurchase>()
+                .eq(BizWoExtraPurchase::getWorkOrderId, workOrderId)
         );
 
-        if (materials == null || materials.isEmpty()) return;
+        if (extraPurchases != null && !extraPurchases.isEmpty()) {
+            for (BizWoExtraPurchase extra : extraPurchases) {
+                BizPurchase purchase = new BizPurchase();
 
-        // 3. 遍历这些需订购的材料，生成采购单
-        for (BizWoMaterial material : materials) {
-            BizPurchase purchase = new BizPurchase();
+                // 自动生成采购单号
+                String purchaseNo = "CG" + DateUtil.format(new Date(), "yyyyMMddHHmmss") + RandomUtil.randomNumbers(2);
+                purchase.setPurchaseNo(purchaseNo);
+                purchase.setRelatedWoNo(wo.getWorkOrderNo()); // 绑定工单号
 
-            // 自动生成采购单号: CG + 日期时间戳 + 两位随机数 (利用 Hutool 工具类)
-            String purchaseNo = "CG" + DateUtil.format(new Date(), "yyyyMMddHHmmss")
-                + RandomUtil.randomNumbers(2);
-            purchase.setPurchaseNo(purchaseNo);
+                // 精准匹配实体类里的 itemContent 字段
+                purchase.setItemName(extra.getItemContent());
+                // 绑定规格
+                purchase.setSpec(extra.getSpec());
 
-            // 绑定数据
-            purchase.setRelatedWoNo(wo.getWorkOrderNo()); // 关联的工单号
-            purchase.setItemName(material.getPaperName()); // 纸张名称 -> 采购物品名称
-            purchase.setSpec(material.getPaperSize()); // 纸张尺寸 -> 规格
+                // 转换数量
+                if (extra.getQuantity() != null) {
+                    purchase.setApplyQty(new BigDecimal(extra.getQuantity()));
+                }
 
-            // 数量转换 (Integer -> BigDecimal)
-            if (material.getRequireQty() != null) {
-                purchase.setApplyQty(new BigDecimal(material.getRequireQty()));
+                purchase.setStatus("0"); // 生成后默认状态为：待处理
+                purchase.setApplicantId(org.dromara.common.satoken.utils.LoginHelper.getUserId());
+
+                purchaseMapper.insert(purchase);
             }
-
-            // 初始状态设置为 '0' (待审/待处理)
-            purchase.setStatus("0");
-            // 申请人为当前审核通过该工单的人
-            purchase.setApplicantId(org.dromara.common.satoken.utils.LoginHelper.getUserId());
-
-            // 插入数据库
-            purchaseMapper.insert(purchase);
         }
     }
 
@@ -336,12 +343,17 @@ public class BizWorkOrderServiceImpl implements IBizWorkOrderService {
 
         if (products == null || products.isEmpty()) return;
 
+        // 👉 新增：为生成的单产品流转单做后缀计数
+        int index = 1;
+
         // 3. 为每个产品生成一行排产记录
         for (BizWoProduct product : products) {
             BizProductionSchedule schedule = new BizProductionSchedule();
             schedule.setWorkOrderId(workOrderId);
             schedule.setWorkOrderNo(wo.getWorkOrderNo());
-            schedule.setItemName(product.getProductName()); // 产品名称
+
+            // 👉 在排产表存入产品的名称，如果你的排产表有 subOrderNo 字段，请把它存进去
+            schedule.setItemName(product.getProductName());
 
             // 获取数量（优先用生产数量，没有则用订单数量）
             Integer qty = Math.toIntExact(product.getProduceQuantity() != null && product.getProduceQuantity() > 0

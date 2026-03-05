@@ -1,5 +1,6 @@
 package org.dromara.system.domain.vo;
 
+import java.math.BigDecimal;
 import java.util.Date;
 import com.fasterxml.jackson.annotation.JsonFormat;
 import org.dromara.system.domain.BizWoOutsourcing;
@@ -31,7 +32,7 @@ public class BizWoOutsourcingVo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     /**
-     * 
+     *
      */
     @ExcelProperty(value = "")
     private Long id;
@@ -70,7 +71,7 @@ public class BizWoOutsourcingVo implements Serializable {
      * 加工数量
      */
     @ExcelProperty(value = "加工数量")
-    private Long processQty;
+    private BigDecimal processQty;
 
     /**
      * 计算单位
@@ -82,19 +83,19 @@ public class BizWoOutsourcingVo implements Serializable {
      * 加工单价
      */
     @ExcelProperty(value = "加工单价")
-    private Long unitPrice;
+    private BigDecimal unitPrice;
 
     /**
      * 加工总价
      */
     @ExcelProperty(value = "加工总价")
-    private Long totalPrice;
+    private BigDecimal totalPrice;
 
     /**
      * 附加费用
      */
     @ExcelProperty(value = "附加费用")
-    private Long extraFee;
+    private BigDecimal extraFee;
 
     /**
      * 交货期
@@ -109,4 +110,39 @@ public class BizWoOutsourcingVo implements Serializable {
     private String remark;
 
 
+    /**
+     * 材料名称
+     */
+    @ExcelProperty(value = "材料名称")
+    private String materialName;
+
+    /**
+     * 长(mm)
+     */
+    @ExcelProperty(value = "长(mm)")
+    private BigDecimal length;
+
+    /**
+     * 宽(mm)
+     */
+    @ExcelProperty(value = "宽(mm)")
+    private BigDecimal width;
+
+    /**
+     * 材料数量
+     */
+    @ExcelProperty(value = "材料数量")
+    private Long materialQty;
+
+    /**
+     * 需生产良品数量
+     */
+    @ExcelProperty(value = "需生产良品数量")
+    private Long goodQty;
+
+    /**
+     * 单价计算方式(如:平方米,张,套)
+     */
+    @ExcelProperty(value = "单价计算方式")
+    private String priceMethod;
 }
