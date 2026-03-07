@@ -1,1 +1,7 @@
 /front/RuoYi-Vue-Plus
+RuoYi-Vue-Plus-5.X/script/docker/redis/conf/redis.conf
+RuoYi-Vue-Plus-5.X/script/docker/docker-compose.yml
+RuoYi-Vue-Plus-5.X/ruoyi-extend/ruoyi-snailjob-server/Dockerfile
+RuoYi-Vue-Plus-5.X/ruoyi-extend/ruoyi-monitor-admin/Dockerfile
+RuoYi-Vue-Plus-5.X/ruoyi-admin/src/main/resources/application-prod.yml
+RuoYi-Vue-Plus-5.X/ruoyi-admin/Dockerfile
