@@ -9,12 +9,15 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.dromara.system.mapper.BizCustomerMapper;
+import org.dromara.system.mapper.BizTempWorkerMapper;
 import org.springframework.stereotype.Service;
 import org.dromara.system.domain.bo.BizFinanceRecordBo;
 import org.dromara.system.domain.vo.BizFinanceRecordVo;
 import org.dromara.system.domain.BizFinanceRecord;
 import org.dromara.system.mapper.BizFinanceRecordMapper;
 import org.dromara.system.service.IBizFinanceRecordService;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Map;
@@ -27,10 +30,8 @@ import java.util.Collection;
 public class BizFinanceRecordServiceImpl implements IBizFinanceRecordService {
 
     private final BizFinanceRecordMapper baseMapper;
-
-    // 👉 注入临时工 Mapper，用于实现反向状态联动
-    @SuppressWarnings("SpringJavaInjectionPointsAutowiringInspection")
-    private final org.dromara.system.mapper.BizTempWorkerMapper tempWorkerMapper;
+    private final BizTempWorkerMapper tempWorkerMapper;
+    private final BizCustomerMapper customerMapper;
 
     @Override
     public BizFinanceRecordVo queryById(Long id){
@@ -60,7 +61,6 @@ public class BizFinanceRecordServiceImpl implements IBizFinanceRecordService {
         lqw.like(StringUtils.isNotBlank(bo.getTargetName()), BizFinanceRecord::getTargetName, bo.getTargetName());
         lqw.eq(StringUtils.isNotBlank(bo.getSettlementStatus()), BizFinanceRecord::getSettlementStatus, bo.getSettlementStatus());
 
-        // 👉 终极防御：先判断不为null，再提取为字符串判断不为空串
         if (params != null && params.get("beginTime") != null && params.get("endTime") != null) {
             String beginTime = params.get("beginTime").toString();
             String endTime = params.get("endTime").toString();
@@ -89,14 +89,14 @@ public class BizFinanceRecordServiceImpl implements IBizFinanceRecordService {
         BizFinanceRecord oldData = baseMapper.selectById(bo.getId());
         if (oldData == null) return false;
 
-        // 1. 结清锁：如果已经是"2-已结清"，严禁一切修改
+        // 1. 结清锁
         if ("2".equals(oldData.getSettlementStatus()) && "2".equals(bo.getSettlementStatus())) {
             throw new org.dromara.common.core.exception.ServiceException("该财务账单已核销结清，作为正式凭证严禁任何修改！");
         }
 
-        // 2. 源单锁：如果不是手工账(不以FIN-MN开头)，强行覆盖前端传来的核心金额和业务数据，保证绝对不被篡改
+        // 2. 源单锁
         if (oldData.getRecordNo() != null && !oldData.getRecordNo().startsWith("FIN-MN-")) {
-            bo.setAmount(oldData.getAmount()); // 强行拉回原金额
+            bo.setAmount(oldData.getAmount());
             bo.setRecordType(oldData.getRecordType());
             bo.setBusinessType(oldData.getBusinessType());
             bo.setRelatedNo(oldData.getRelatedNo());
@@ -107,23 +107,47 @@ public class BizFinanceRecordServiceImpl implements IBizFinanceRecordService {
         validEntityBeforeSave(update);
         boolean flag = baseMapper.updateById(update) > 0;
 
-        // 👉 3. 业财反向联动：如果本次操作是“核销结清”
+        // 3. 业财反向联动
         if (flag && "2".equals(bo.getSettlementStatus()) && !"2".equals(oldData.getSettlementStatus())) {
-            // 如果是临时工费，反向更新临时工登记表的状态
+
             if ("临时工费".equals(oldData.getBusinessType()) && oldData.getRecordNo() != null && oldData.getRecordNo().startsWith("FIN-TW-")) {
                 String twIdStr = oldData.getRecordNo().replace("FIN-TW-", "");
                 try {
                     Long twId = Long.parseLong(twIdStr);
                     org.dromara.system.domain.BizTempWorker tw = tempWorkerMapper.selectById(twId);
                     if (tw != null && !"1".equals(tw.getPayStatus())) {
-                        tw.setPayStatus("1"); // 设为 1-已付
+                        tw.setPayStatus("1");
                         tempWorkerMapper.updateById(tw);
                     }
                 } catch (Exception e) {
                     log.error("反向核销临时工状态失败", e);
                 }
             }
-            // (未来如果委外加工需要反向联动，也可以写在这里)
+
+            // 针对供应商/客户的核销，扣减对方总欠款并增加交易总额
+            if (org.dromara.common.core.utils.StringUtils.isNotBlank(oldData.getTargetName())) {
+                com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<org.dromara.system.domain.BizCustomer> custLqw = com.baomidou.mybatisplus.core.toolkit.Wrappers.lambdaQuery();
+                custLqw.eq(org.dromara.system.domain.BizCustomer::getCompanyName, oldData.getTargetName());
+                java.util.List<org.dromara.system.domain.BizCustomer> customers = customerMapper.selectList(custLqw);
+
+                if(customers != null && !customers.isEmpty()){
+                    org.dromara.system.domain.BizCustomer customer = customers.get(0);
+
+                    // 扣减欠款
+                    java.math.BigDecimal currentDebt = customer.getTotalOweAmount() == null ? java.math.BigDecimal.ZERO : customer.getTotalOweAmount();
+                    java.math.BigDecimal newDebt = currentDebt.subtract(oldData.getAmount());
+                    if (newDebt.compareTo(java.math.BigDecimal.ZERO) < 0) {
+                        newDebt = java.math.BigDecimal.ZERO;
+                    }
+                    customer.setTotalOweAmount(newDebt);
+
+                    // 👉 [新增修复逻辑]：累加交易总额
+                    java.math.BigDecimal currentDealAmount = customer.getTotalDealAmount() == null ? java.math.BigDecimal.ZERO : customer.getTotalDealAmount();
+                    customer.setTotalDealAmount(currentDealAmount.add(oldData.getAmount()));
+
+                    customerMapper.updateById(customer);
+                }
+            }
         }
 
         return flag;

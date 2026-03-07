@@ -65,4 +65,6 @@ public interface IBizCustomerService {
      * @return 是否删除成功
      */
     Boolean deleteWithValidByIds(Collection<Long> ids, Boolean isValid);
+
+    void settleDebt(BizCustomerBo bo);
 }

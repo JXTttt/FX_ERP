@@ -35,11 +35,24 @@ public class BizOutsourcingReceiptServiceImpl implements IBizOutsourcingReceiptS
     @SuppressWarnings("SpringJavaInjectionPointsAutowiringInspection")
     private final org.dromara.system.mapper.BizCustomerMapper customerMapper;
 
+    /**
+     * 根据 ID 查询委外收货单详情
+     *
+     * @param id 收货单 ID
+     * @return 返回收货单 VO 对象，如果不存在则返回 null
+     */
     @Override
     public BizOutsourcingReceiptVo queryById(Long id){
         return baseMapper.selectVoById(id);
     }
 
+    /**
+     * 分页查询委外收货单列表
+     *
+     * @param bo 收货单查询条件封装对象
+     * @param pageQuery 分页查询参数封装对象
+     * @return 返回分页结果，包含数据列表和总数信息
+     */
     @Override
     public TableDataInfo<BizOutsourcingReceiptVo> queryPageList(BizOutsourcingReceiptBo bo, PageQuery pageQuery) {
         LambdaQueryWrapper<BizOutsourcingReceipt> lqw = buildQueryWrapper(bo);
@@ -110,6 +123,11 @@ public class BizOutsourcingReceiptServiceImpl implements IBizOutsourcingReceiptS
                     org.dromara.system.domain.BizCustomer customer = customerMapper.selectById(bo.getSupplierId());
                     if (customer != null && customer.getCompanyName() != null) {
                         targetName = customer.getCompanyName();
+
+                        // 👉 修正点：将 arrearsAmount 改为了真实的字段 totalOweAmount
+                        java.math.BigDecimal currentDebt = customer.getTotalOweAmount() == null ? java.math.BigDecimal.ZERO : customer.getTotalOweAmount();
+                        customer.setTotalOweAmount(currentDebt.add(bo.getTotalFee()));
+                        customerMapper.updateById(customer);
                     }
                 }
                 finance.setTargetName(targetName);

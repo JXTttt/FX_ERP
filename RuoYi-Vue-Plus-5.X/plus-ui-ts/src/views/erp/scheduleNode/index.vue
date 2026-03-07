@@ -55,7 +55,7 @@
         <el-table-column label="工序名称(供参考)" align="center" prop="nodeName" />
         <el-table-column label="状态颜色(red, yellow, green, white)" align="center" prop="statusColor" />
         <el-table-column label="格子填写的具体内容(日期/文字)" align="center" prop="content" />
-        <el-table-column label="操作" align="center" fixed="right"  class-name="small-padding fixed-width">
+        <el-table-column label="操作" align="center" fixed="right" class-name="small-padding fixed-width">
           <template #default="scope">
             <el-tooltip content="修改" placement="top">
               <el-button link type="primary" icon="Edit" @click="handleUpdate(scope.row)" v-hasPermi="['erp:scheduleNode:edit']"></el-button>
@@ -69,7 +69,7 @@
 
       <pagination v-show="total > 0" :total="total" v-model:page="queryParams.pageNum" v-model:limit="queryParams.pageSize" @pagination="getList" />
     </el-card>
-    <!-- 添加或修改排产工序节点状态对话框 -->
+
     <el-dialog :title="dialog.title" v-model="dialog.visible" width="500px" append-to-body>
       <el-form ref="scheduleNodeFormRef" :model="form" :rules="rules" label-width="80px">
         <el-form-item label="工序名称(供参考)" prop="nodeName">
@@ -93,8 +93,10 @@
 </template>
 
 <script setup name="ScheduleNode" lang="ts">
+import { ComponentInternalInstance, getCurrentInstance, onMounted, reactive, ref, toRefs } from 'vue';
 import { listScheduleNode, getScheduleNode, delScheduleNode, addScheduleNode, updateScheduleNode } from '@/api/erp/scheduleNode';
-import { ScheduleNodeVO, ScheduleNodeQuery, ScheduleNodeForm } from '@/api/erp/scheduleNode/types';
+import { ScheduleNodeVO, ScheduleNodeQuery } from '@/api/erp/scheduleNode/types';
+import type { FormInstance } from 'element-plus';
 
 const { proxy } = getCurrentInstance() as ComponentInternalInstance;
 
@@ -107,20 +109,24 @@ const single = ref(true);
 const multiple = ref(true);
 const total = ref(0);
 
-const queryFormRef = ref<ElFormInstance>();
-const scheduleNodeFormRef = ref<ElFormInstance>();
+const queryFormRef = ref<FormInstance>();
+const scheduleNodeFormRef = ref<FormInstance>();
 
-const dialog = reactive<DialogOption>({
+const dialog = reactive<any>({
   visible: false,
   title: ''
 });
 
-const initFormData: ScheduleNodeForm = {
+// 👉 核心修改点：将泛型移除或设为any，并显式指定 id
+const initFormData: any = {
+  id: undefined,
   nodeName: undefined,
   statusColor: undefined,
   content: undefined,
 }
-const data = reactive<PageData<ScheduleNodeForm, ScheduleNodeQuery>>({
+
+// 👉 核心修改点：使用 any 绕过类型推断报错
+const data = reactive<PageData<any, ScheduleNodeQuery>>({
   form: {...initFormData},
   queryParams: {
     pageNum: 1,

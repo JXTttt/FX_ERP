@@ -190,33 +190,41 @@ public class BizInventoryServiceImpl implements IBizInventoryService {
             throw new org.dromara.common.core.exception.ServiceException("出货失败：出货数量不能大于当前库存剩余量！");
         }
 
-        // 1. 扣减库存数量
-        java.math.BigDecimal newQty = inv.getCurrentQty().subtract(outboundQty);
-        inv.setCurrentQty(newQty);
+        // 👉 进阶修复1：使用 setSql 进行数据库级别的库存安全扣减，防止两人同时出库导致库存变负数！
+        boolean flag = baseMapper.update(null, com.baomidou.mybatisplus.core.toolkit.Wrappers.<org.dromara.system.domain.BizInventory>lambdaUpdate()
+            .eq(org.dromara.system.domain.BizInventory::getId, id)
+            .ge(org.dromara.system.domain.BizInventory::getCurrentQty, outboundQty) // 数据库级拦截超卖
+            .setSql("current_qty = current_qty - " + outboundQty)
+            .setSql(inv.getPurchasePrice() != null, "total_amount = (current_qty - " + outboundQty + ") * " + inv.getPurchasePrice())
+        ) > 0;
 
-        // 2. 同步重新计算剩余库存的总金额
-        if (inv.getPurchasePrice() != null) {
-            inv.setTotalAmount(newQty.multiply(inv.getPurchasePrice()));
+        if (!flag) {
+            throw new org.dromara.common.core.exception.ServiceException("出货异常：库存扣减失败，可能是库存不足或数据正在被其他人修改！");
         }
 
-        boolean flag = baseMapper.updateById(inv) > 0;
-
         // 3. 👉 业财联动：如果是成品出货，自动给客户记一笔“应收账款”
-        if (flag && "成品".equals(inv.getItemType()) && inv.getPurchasePrice() != null) {
+        if ("成品".equals(inv.getItemType()) && inv.getPurchasePrice() != null) {
+            java.math.BigDecimal totalMoney = outboundQty.multiply(inv.getPurchasePrice());
+
             org.dromara.system.domain.BizFinanceRecord finance = new org.dromara.system.domain.BizFinanceRecord();
             finance.setRecordNo("FIN-XS-" + System.currentTimeMillis());
             finance.setRecordType("1"); // 1-收入/应收 (客户欠我们的钱)
             finance.setBusinessType("销售出货");
             finance.setRelatedNo(inv.getUniqueCode()); // 把工单号带过去作为凭证
-            finance.setAmount(outboundQty.multiply(inv.getPurchasePrice())); // 出货量 * 售价
+            finance.setAmount(totalMoney);
             finance.setSettlementStatus("0"); // 未结清(挂账)
 
-            // 查询真实的客户公司名称 (当初排产入库时，我们把customerId存在了supplierId字段里)
             String targetName = String.valueOf(inv.getSupplierId());
             if (inv.getSupplierId() != null) {
                 org.dromara.system.domain.BizCustomer customer = customerMapper.selectById(inv.getSupplierId());
                 if (customer != null && customer.getCompanyName() != null) {
                     targetName = customer.getCompanyName();
+
+                    // 👉 进阶修复2：同步增加客户欠款 (我们发货了，客户欠我们钱)
+                    customerMapper.update(null, com.baomidou.mybatisplus.core.toolkit.Wrappers.<org.dromara.system.domain.BizCustomer>lambdaUpdate()
+                        .eq(org.dromara.system.domain.BizCustomer::getId, inv.getSupplierId())
+                        .setSql("total_owe_amount = COALESCE(total_owe_amount, 0) + " + totalMoney)
+                    );
                 }
             }
             finance.setTargetName(targetName);
@@ -225,6 +233,6 @@ public class BizInventoryServiceImpl implements IBizInventoryService {
             financeRecordMapper.insert(finance);
         }
 
-        return flag;
+        return true;
     }
 }

@@ -9,6 +9,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.dromara.system.domain.BizCustomer;
 import org.dromara.system.mapper.BizCustomerMapper;
 import org.dromara.system.mapper.BizFinanceRecordMapper;
 import org.dromara.system.mapper.BizInventoryMapper;
@@ -138,11 +139,11 @@ public class BizPurchaseServiceImpl implements IBizPurchaseService {
     /**
      * 自动转入库存逻辑
      */
-    private void handleInventoryInbound(BizPurchaseBo bo) {
+    private void handleInventoryInbound(org.dromara.system.domain.bo.BizPurchaseBo bo) {
         // 根据物品名称和规格，在库存中寻找是否已有该材料
-        LambdaQueryWrapper<org.dromara.system.domain.BizInventory> lqw = new LambdaQueryWrapper<>();
+        com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<org.dromara.system.domain.BizInventory> lqw = new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<>();
         lqw.eq(org.dromara.system.domain.BizInventory::getItemName, bo.getItemName());
-        if (StringUtils.isNotBlank(bo.getSpec())) {
+        if (org.dromara.common.core.utils.StringUtils.isNotBlank(bo.getSpec())) {
             lqw.eq(org.dromara.system.domain.BizInventory::getSpec, bo.getSpec());
         }
         lqw.last("limit 1");
@@ -152,18 +153,20 @@ public class BizPurchaseServiceImpl implements IBizPurchaseService {
         // 提取本次真实验收的数量
         java.math.BigDecimal incomingQty = bo.getReceivedQty() != null ? bo.getReceivedQty() : bo.getApplyQty();
 
-        // 👉 安全提取单价：使用终极 String 转换法彻底断绝格式报错
+        // 安全提取单价
         java.math.BigDecimal safePrice = java.math.BigDecimal.ZERO;
         if (bo.getPrice() != null) {
             safePrice = new java.math.BigDecimal(String.valueOf(bo.getPrice()));
         }
 
         if (inv != null) {
-            // 如果仓库里已有该材料 -> 累加库存，并覆盖最新价格
-            inv.setCurrentQty(inv.getCurrentQty().add(incomingQty));
-            inv.setPurchasePrice(safePrice);
-            inv.setTotalAmount(inv.getCurrentQty().multiply(safePrice));
-            inventoryMapper.updateById(inv);
+            // 👉 进阶修复：使用 setSql 交给数据库去累加，彻底断绝高并发下的超卖/少加问题
+            inventoryMapper.update(null, com.baomidou.mybatisplus.core.toolkit.Wrappers.<org.dromara.system.domain.BizInventory>lambdaUpdate()
+                .eq(org.dromara.system.domain.BizInventory::getId, inv.getId())
+                .setSql("current_qty = current_qty + " + incomingQty)
+                .setSql("total_amount = (current_qty + " + incomingQty + ") * " + safePrice)
+                .set(org.dromara.system.domain.BizInventory::getPurchasePrice, safePrice)
+            );
         } else {
             // 如果仓库里没有该材料 -> 新建一条库存记录
             inv = new org.dromara.system.domain.BizInventory();
@@ -178,9 +181,8 @@ public class BizPurchaseServiceImpl implements IBizPurchaseService {
             inventoryMapper.insert(inv);
         }
 
-        // ================= 下面是新增的业财联动代码 =================
+        // ================= 业财联动：生成应付款，并增加供应商总欠款 =================
         java.math.BigDecimal totalMoney = incomingQty.multiply(safePrice);
-        // 只有当金额大于0时，才产生财务账单
         if (totalMoney.compareTo(java.math.BigDecimal.ZERO) > 0) {
             org.dromara.system.domain.BizFinanceRecord finance = new org.dromara.system.domain.BizFinanceRecord();
             finance.setRecordNo("FIN-CG-" + System.currentTimeMillis());
@@ -190,12 +192,17 @@ public class BizPurchaseServiceImpl implements IBizPurchaseService {
             finance.setAmount(totalMoney);
             finance.setSettlementStatus("0"); // 默认未结清(挂账)
 
-            // 查询真实的供应商公司名称
             String targetName = String.valueOf(bo.getSupplierId());
             if (bo.getSupplierId() != null) {
                 org.dromara.system.domain.BizCustomer customer = customerMapper.selectById(bo.getSupplierId());
                 if (customer != null && customer.getCompanyName() != null) {
                     targetName = customer.getCompanyName();
+
+                    // 👉 核心修复：同步增加供应商欠款 (使用 COALESCE 防止 null 值报错，直接交由 SQL 计算)
+                    customerMapper.update(null, com.baomidou.mybatisplus.core.toolkit.Wrappers.<org.dromara.system.domain.BizCustomer>lambdaUpdate()
+                        .eq(org.dromara.system.domain.BizCustomer::getId, bo.getSupplierId())
+                        .setSql("total_owe_amount = COALESCE(total_owe_amount, 0) + " + totalMoney)
+                    );
                 }
             }
             finance.setTargetName(targetName);
@@ -203,7 +210,6 @@ public class BizPurchaseServiceImpl implements IBizPurchaseService {
 
             financeRecordMapper.insert(finance);
         }
-        // =========================================================
     }
 
     private void validEntityBeforeSave(BizPurchase entity){

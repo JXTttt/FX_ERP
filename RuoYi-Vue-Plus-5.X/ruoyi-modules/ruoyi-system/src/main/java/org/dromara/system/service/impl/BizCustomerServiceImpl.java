@@ -1,5 +1,6 @@
 package org.dromara.system.service.impl;
 
+import org.dromara.common.core.exception.ServiceException;
 import org.dromara.common.core.utils.MapstructUtils;
 import org.dromara.common.core.utils.StringUtils;
 import org.dromara.common.mybatis.core.page.TableDataInfo;
@@ -9,6 +10,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.dromara.system.mapper.BizFinanceRecordMapper;
 import org.springframework.stereotype.Service;
 import org.dromara.system.domain.bo.BizCustomerBo;
 import org.dromara.system.domain.vo.BizCustomerVo;
@@ -32,25 +34,13 @@ import java.util.Collection;
 public class BizCustomerServiceImpl implements IBizCustomerService {
 
     private final BizCustomerMapper baseMapper;
+    private final BizFinanceRecordMapper financeRecordMapper;
 
-    /**
-     * 查询客户及供应商
-     *
-     * @param id 主键
-     * @return 客户及供应商
-     */
     @Override
     public BizCustomerVo queryById(Long id){
         return baseMapper.selectVoById(id);
     }
 
-    /**
-     * 分页查询客户及供应商列表
-     *
-     * @param bo        查询条件
-     * @param pageQuery 分页参数
-     * @return 客户及供应商分页列表
-     */
     @Override
     public TableDataInfo<BizCustomerVo> queryPageList(BizCustomerBo bo, PageQuery pageQuery) {
         LambdaQueryWrapper<BizCustomer> lqw = buildQueryWrapper(bo);
@@ -58,12 +48,6 @@ public class BizCustomerServiceImpl implements IBizCustomerService {
         return TableDataInfo.build(result);
     }
 
-    /**
-     * 查询符合条件的客户及供应商列表
-     *
-     * @param bo 查询条件
-     * @return 客户及供应商列表
-     */
     @Override
     public List<BizCustomerVo> queryList(BizCustomerBo bo) {
         LambdaQueryWrapper<BizCustomer> lqw = buildQueryWrapper(bo);
@@ -74,7 +58,6 @@ public class BizCustomerServiceImpl implements IBizCustomerService {
         Map<String, Object> params = bo.getParams();
         LambdaQueryWrapper<BizCustomer> lqw = Wrappers.lambdaQuery();
 
-        // --- 1. ID与文本字段 ---
         lqw.eq(bo.getId() != null, BizCustomer::getId, bo.getId());
         lqw.like(StringUtils.isNotBlank(bo.getCompanyName()), BizCustomer::getCompanyName, bo.getCompanyName());
         lqw.eq(StringUtils.isNotBlank(bo.getCustomerCode()), BizCustomer::getCustomerCode, bo.getCustomerCode());
@@ -83,7 +66,6 @@ public class BizCustomerServiceImpl implements IBizCustomerService {
         lqw.like(StringUtils.isNotBlank(bo.getContactPhone()), BizCustomer::getContactPhone, bo.getContactPhone());
         lqw.eq(StringUtils.isNotBlank(bo.getCustomerType()), BizCustomer::getCustomerType, bo.getCustomerType());
 
-        // --- 2. 地址信息 ---
         lqw.eq(StringUtils.isNotBlank(bo.getCompanyProvince()), BizCustomer::getCompanyProvince, bo.getCompanyProvince());
         lqw.eq(StringUtils.isNotBlank(bo.getCompanyCity()), BizCustomer::getCompanyCity, bo.getCompanyCity());
         lqw.eq(StringUtils.isNotBlank(bo.getCompanyDistrict()), BizCustomer::getCompanyDistrict, bo.getCompanyDistrict());
@@ -94,15 +76,11 @@ public class BizCustomerServiceImpl implements IBizCustomerService {
         lqw.eq(StringUtils.isNotBlank(bo.getDeliveryAddress()), BizCustomer::getDeliveryAddress, bo.getDeliveryAddress());
         lqw.eq(StringUtils.isNotBlank(bo.getDeliveryUnit()), BizCustomer::getDeliveryUnit, bo.getDeliveryUnit());
 
-        // --- 3. 财务与业务员 (Long/BigDecimal 类型，必须用 != null) ---
         lqw.eq(StringUtils.isNotBlank(bo.getBankAccountInfo()), BizCustomer::getBankAccountInfo, bo.getBankAccountInfo());
         lqw.eq(bo.getTotalDealAmount() != null, BizCustomer::getTotalDealAmount, bo.getTotalDealAmount());
         lqw.eq(bo.getTotalOweAmount() != null, BizCustomer::getTotalOweAmount, bo.getTotalOweAmount());
         lqw.eq(bo.getSalesManId() != null, BizCustomer::getSalesManId, bo.getSalesManId());
 
-        // --- 4. 关键修正点：创建人/更新人是 Long 类型 ---
-        // ❌ 错误代码：lqw.eq(StringUtils.isNotBlank(bo.getCreateBy())...
-        // ✅ 正确代码：
         lqw.eq(bo.getCreateBy() != null, BizCustomer::getCreateBy, bo.getCreateBy());
         lqw.eq(bo.getCreateTime() != null, BizCustomer::getCreateTime, bo.getCreateTime());
         lqw.eq(bo.getUpdateBy() != null, BizCustomer::getUpdateBy, bo.getUpdateBy());
@@ -111,12 +89,6 @@ public class BizCustomerServiceImpl implements IBizCustomerService {
         return lqw;
     }
 
-    /**
-     * 新增客户及供应商
-     *
-     * @param bo 客户及供应商
-     * @return 是否新增成功
-     */
     @Override
     public Boolean insertByBo(BizCustomerBo bo) {
         BizCustomer add = MapstructUtils.convert(bo, BizCustomer.class);
@@ -128,12 +100,6 @@ public class BizCustomerServiceImpl implements IBizCustomerService {
         return flag;
     }
 
-    /**
-     * 修改客户及供应商
-     *
-     * @param bo 客户及供应商
-     * @return 是否修改成功
-     */
     @Override
     public Boolean updateByBo(BizCustomerBo bo) {
         BizCustomer update = MapstructUtils.convert(bo, BizCustomer.class);
@@ -141,25 +107,52 @@ public class BizCustomerServiceImpl implements IBizCustomerService {
         return baseMapper.updateById(update) > 0;
     }
 
-    /**
-     * 保存前的数据校验
-     */
     private void validEntityBeforeSave(BizCustomer entity){
         //TODO 做一些数据校验,如唯一约束
     }
 
-    /**
-     * 校验并批量删除客户及供应商信息
-     *
-     * @param ids     待删除的主键集合
-     * @param isValid 是否进行有效性校验
-     * @return 是否删除成功
-     */
     @Override
     public Boolean deleteWithValidByIds(Collection<Long> ids, Boolean isValid) {
         if(isValid){
             //TODO 做一些业务上的校验,判断是否需要校验
         }
         return baseMapper.deleteByIds(ids) > 0;
+    }
+
+    @Override
+    @org.springframework.transaction.annotation.Transactional(rollbackFor = Exception.class)
+    public void settleDebt(BizCustomerBo bo) {
+        org.dromara.system.domain.BizCustomer customer = baseMapper.selectById(bo.getId());
+        if(customer == null) throw new org.dromara.common.core.exception.ServiceException("客户/供应商不存在");
+
+        if(bo.getSettleAmount() == null || bo.getSettleAmount().compareTo(java.math.BigDecimal.ZERO) <= 0) {
+            throw new org.dromara.common.core.exception.ServiceException("结清金额必须大于0");
+        }
+
+        // 1. 扣减客户表的总欠款
+        java.math.BigDecimal currentDebt = customer.getTotalOweAmount() == null ? java.math.BigDecimal.ZERO : customer.getTotalOweAmount();
+        java.math.BigDecimal newDebt = currentDebt.subtract(bo.getSettleAmount());
+        if(newDebt.compareTo(java.math.BigDecimal.ZERO) < 0) {
+            newDebt = java.math.BigDecimal.ZERO;
+        }
+        customer.setTotalOweAmount(newDebt);
+
+        // 👉 [新增修复逻辑]：累加客户表的交易总额
+        java.math.BigDecimal currentDealAmount = customer.getTotalDealAmount() == null ? java.math.BigDecimal.ZERO : customer.getTotalDealAmount();
+        customer.setTotalDealAmount(currentDealAmount.add(bo.getSettleAmount()));
+
+        baseMapper.updateById(customer);
+
+        // 2. 自动生成一笔【已结清】的财务手工流水
+        org.dromara.system.domain.BizFinanceRecord finance = new org.dromara.system.domain.BizFinanceRecord();
+        finance.setRecordNo("FIN-MN-" + System.currentTimeMillis());
+        finance.setRecordType("1".equals(customer.getCustomerType()) ? "1" : "2");
+        finance.setBusinessType("手工结清");
+        finance.setAmount(bo.getSettleAmount());
+        finance.setTargetName(customer.getCompanyName());
+        finance.setSettlementStatus("2"); // 2-已结清
+        finance.setRemark("在客户管理处手动打款结清，备注：" + (bo.getRemark() == null ? "" : bo.getRemark()));
+
+        financeRecordMapper.insert(finance);
     }
 }

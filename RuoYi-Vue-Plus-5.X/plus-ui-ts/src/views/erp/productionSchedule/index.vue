@@ -10,6 +10,13 @@
             <el-form-item label="部件名称" prop="itemName">
               <el-input v-model="queryParams.itemName" placeholder="请输入部件/产品名称" clearable @keyup.enter="handleQuery" />
             </el-form-item>
+            <el-form-item label="生产状态" prop="status">
+              <el-select v-model="queryParams.status" placeholder="请选择状态" clearable style="width: 120px">
+                <el-option label="待生产" value="0" />
+                <el-option label="生产中" value="1" />
+                <el-option label="已完工" value="2" />
+              </el-select>
+            </el-form-item>
             <el-form-item>
               <el-button type="primary" icon="Search" @click="handleQuery">搜索</el-button>
               <el-button icon="Refresh" @click="resetQuery">重置</el-button>
@@ -50,6 +57,15 @@
               <div style="font-size: 11px; color: #888;">{{ scope.row.workOrderNo }}</div>
             </template>
           </el-table-column>
+
+          <el-table-column label="状态" prop="status" width="80" align="center" fixed="left">
+            <template #default="scope">
+              <el-tag v-if="scope.row.status === '0' || !scope.row.status" type="info">待生产</el-tag>
+              <el-tag v-else-if="scope.row.status === '1'" type="primary">生产中</el-tag>
+              <el-tag v-else-if="scope.row.status === '2'" type="success">已完工</el-tag>
+            </template>
+          </el-table-column>
+
           <el-table-column label="数量" prop="quantity" width="80" align="center" fixed="left">
             <template #default="scope">
               <span style="color: red; font-weight: bold;">{{ scope.row.quantity }}</span>
@@ -140,7 +156,13 @@
 
         <el-table-column label="操作" align="center" fixed="right" width="110">
           <template #default="scope">
-            <el-button type="success" plain icon="Check" @click="handleComplete(scope.row)">完成入库</el-button>
+            <el-button 
+              v-if="scope.row.status !== '2'" 
+              type="success" 
+              plain 
+              icon="Check" 
+              @click="handleComplete(scope.row)"
+            >完成入库</el-button>
           </template>
         </el-table-column>
 
@@ -184,7 +206,7 @@
 <script setup lang="ts" name="ScheduleMatrix">
 import { ref, reactive, onMounted, getCurrentInstance } from 'vue';
 import { listMatrix, updateScheduleNode } from '@/api/erp/schedule';
-import request from '@/utils/request'; // 👉 新增：引入 request 工具用于发送完成入库请求
+import request from '@/utils/request'; 
 
 const { proxy } = getCurrentInstance() as any;
 
@@ -198,7 +220,8 @@ const queryParams = reactive({
   pageNum: 1,
   pageSize: 10,
   workOrderNo: undefined,
-  itemName: undefined
+  itemName: undefined,
+  status: undefined // 👉 新增：状态筛选参数
 });
 
 // 节点编辑弹窗相关
@@ -208,9 +231,8 @@ const nodeForm = ref({
   statusColor: 'white',
   content: ''
 });
-const currentNodeRow = ref<any>(null); // 记录正在编辑的哪一行（仅用于展示标题）
+const currentNodeRow = ref<any>(null); 
 
-// 查询列表
 const getList = async () => {
   loading.value = true;
   try {
@@ -222,7 +244,6 @@ const getList = async () => {
   }
 };
 
-// 搜索 & 重置
 const handleQuery = () => {
   queryParams.pageNum = 1;
   getList();
@@ -232,12 +253,17 @@ const resetQuery = () => {
   handleQuery();
 };
 
-// 点击格子，打开编辑弹窗
 const openEditNode = (nodeData: any, nodeName: string, row: any) => {
   if (!nodeData || !nodeData.id) {
     proxy.$modal.msgWarning("该节点数据异常或不存在");
     return;
   }
+  // 👉 增加一个业务防护：已完工的工单不能再改格子了
+  if (row.status === '2') {
+    proxy.$modal.msgWarning("该工单已完工入库，不可再修改排产节点！");
+    return;
+  }
+  
   currentNodeRow.value = row;
   nodeDialog.title = `更新状态 - [ ${nodeName} ]`;
   nodeForm.value = {
@@ -248,11 +274,9 @@ const openEditNode = (nodeData: any, nodeName: string, row: any) => {
   nodeDialog.visible = true;
 };
 
-// 提交格子修改
 const submitNodeEdit = async () => {
   submitLoading.value = true;
   try {
-    // 构造请求给后端的 BO 对象。只要传 id, statusColor, content 即可更新
     const reqData = {
       id: nodeForm.value.id,
       statusColor: nodeForm.value.statusColor,
@@ -261,14 +285,12 @@ const submitNodeEdit = async () => {
     await updateScheduleNode(reqData);
     proxy.$modal.msgSuccess("更新成功");
     nodeDialog.visible = false;
-    // 局部刷新列表
     getList();
   } finally {
     submitLoading.value = false;
   }
 };
 
-// 👉 新增：完成入库操作
 const handleComplete = (row: any) => {
   proxy.$modal.confirm(`确认将【${row.itemName}】标记为生产完成，并移入成品库存吗？`).then(() => {
     return request({
@@ -277,7 +299,7 @@ const handleComplete = (row: any) => {
     });
   }).then(() => {
     proxy.$modal.msgSuccess("该工单已完成生产并成功入库！");
-    getList(); // 刷新大表盘，完成的数据会自动消失
+    getList(); 
   }).catch(() => {});
 };
 
@@ -312,7 +334,6 @@ onMounted(() => {
 /* 矩阵表定制样式 */
 .schedule-matrix-table {
   :deep(.el-table__body-wrapper) {
-    // 单元格去掉 padding 方便填满
     td.el-table__cell {
       padding: 0;
       .cell {
@@ -324,13 +345,12 @@ onMounted(() => {
     }
   }
 
-  /* 每一个可点击的格子 */
   .cell-box {
     width: 100%;
-    min-height: 80px; /* 保证格子够大，像 Excel 一样 */
+    min-height: 80px; 
     padding: 8px;
     cursor: pointer;
-    white-space: pre-wrap; /* 允许换行 */
+    white-space: pre-wrap; 
     font-size: 12px;
     line-height: 1.4;
     transition: opacity 0.2s;
@@ -343,13 +363,11 @@ onMounted(() => {
   }
 }
 
-/* 定义排产大表的背景色系（精准还原 Excel 感觉） */
 .bg-red { background-color: #ff4d4f !important; color: #ffffff !important; }
 .bg-yellow { background-color: #faad14 !important; color: #000000 !important; }
 .bg-green { background-color: #52c41a !important; color: #ffffff !important; }
 .bg-white { background-color: #ffffff !important; color: #333333 !important; }
 
-/* 弹窗里的单选框颜色加强 */
 :deep(.radio-red.is-checked .el-radio__inner) { background: #ff4d4f; border-color: #ff4d4f; }
 :deep(.radio-red.is-checked .el-radio__label) { color: #ff4d4f; }
 :deep(.radio-yellow.is-checked .el-radio__inner) { background: #faad14; border-color: #faad14; }

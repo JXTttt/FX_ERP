@@ -107,14 +107,15 @@ public class BizProductionScheduleServiceImpl implements IBizProductionScheduleS
         org.dromara.system.domain.BizProductionSchedule schedule = baseMapper.selectById(id);
         if (schedule == null) return false;
 
-        org.dromara.system.domain.BizInventory inv = new org.dromara.system.domain.BizInventory();
-        inv.setUniqueCode(schedule.getWorkOrderNo());
-        inv.setItemType("成品");
-        inv.setItemName(schedule.getItemName());
+        java.math.BigDecimal incomingQty = new java.math.BigDecimal(schedule.getQuantity());
 
-        // 设置初始入库数量
-        java.math.BigDecimal initialQty = new java.math.BigDecimal(schedule.getQuantity());
-        inv.setCurrentQty(initialQty);
+        // 👉 核心修复1：解决库存重复插入的问题。先根据工单号和产品名，查查有没有建过库存了
+        org.dromara.system.domain.BizInventory inv = inventoryMapper.selectOne(
+            new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<org.dromara.system.domain.BizInventory>()
+                .eq(org.dromara.system.domain.BizInventory::getUniqueCode, schedule.getWorkOrderNo())
+                .eq(org.dromara.system.domain.BizInventory::getItemName, schedule.getItemName())
+                .last("limit 1")
+        );
 
         // 尝试从原工单产品表中拉取该产品的“规格”、“单位”和“单价”
         org.dromara.system.domain.BizWoProduct product = woProductMapper.selectOne(
@@ -124,28 +125,48 @@ public class BizProductionScheduleServiceImpl implements IBizProductionScheduleS
                 .last("limit 1")
         );
 
+        java.math.BigDecimal unitPrice = java.math.BigDecimal.ZERO;
+        String spec = null;
+        String unit = "个";
+
         if (product != null) {
-            inv.setSpec(product.getSpec());
-            inv.setUnit(product.getUnit());
-
-            // 👉 终极修复：不再判断类型，直接转成 String 再转 BigDecimal，绝不报错！
+            spec = product.getSpec();
+            unit = product.getUnit();
             if (product.getUnitPrice() != null) {
-                java.math.BigDecimal unitPrice = new java.math.BigDecimal(String.valueOf(product.getUnitPrice()));
-
-                inv.setPurchasePrice(unitPrice); // 存入单价
-                inv.setTotalAmount(initialQty.multiply(unitPrice)); // 数量 * 单价
+                unitPrice = new java.math.BigDecimal(String.valueOf(product.getUnitPrice()));
             }
-        } else {
-            inv.setUnit("个");
         }
 
-        // 查询原工单，把客户ID塞入库存记录
+        Long customerId = null;
         org.dromara.system.domain.BizWorkOrder wo = workOrderMapper.selectById(schedule.getWorkOrderId());
-        if (wo != null) {
-            inv.setSupplierId(wo.getCustomerId());
+        if (wo != null) customerId = wo.getCustomerId();
+
+        if (inv != null) {
+            // 仓库里已有该产品的库存槽位，直接累加数量（防并发写法）
+            inventoryMapper.update(null, com.baomidou.mybatisplus.core.toolkit.Wrappers.<org.dromara.system.domain.BizInventory>lambdaUpdate()
+                .eq(org.dromara.system.domain.BizInventory::getId, inv.getId())
+                .setSql("current_qty = current_qty + " + incomingQty)
+                .setSql("total_amount = (current_qty + " + incomingQty + ") * " + unitPrice)
+            );
+        } else {
+            // 首次完工，新建成品库存槽位
+            inv = new org.dromara.system.domain.BizInventory();
+            inv.setUniqueCode(schedule.getWorkOrderNo());
+            inv.setItemType("成品");
+            inv.setItemName(schedule.getItemName());
+            inv.setCurrentQty(incomingQty);
+            inv.setSpec(spec);
+            inv.setUnit(unit);
+            inv.setPurchasePrice(unitPrice);
+            inv.setTotalAmount(incomingQty.multiply(unitPrice));
+            inv.setSupplierId(customerId);
+            inventoryMapper.insert(inv);
         }
 
-        inventoryMapper.insert(inv);
-        return baseMapper.deleteById(id) > 0;
+        // 👉 核心修复2：禁止物理删除业务单据！！改为更新状态为 "2" (已完工)
+        return baseMapper.update(null, com.baomidou.mybatisplus.core.toolkit.Wrappers.<org.dromara.system.domain.BizProductionSchedule>lambdaUpdate()
+            .eq(org.dromara.system.domain.BizProductionSchedule::getId, id)
+            .setSql("status = '2'") // 请确保数据库存在 status 字段！
+        ) > 0;
     }
 }

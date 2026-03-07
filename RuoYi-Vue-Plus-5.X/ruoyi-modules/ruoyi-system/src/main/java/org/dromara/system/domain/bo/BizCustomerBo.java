@@ -139,4 +139,6 @@ public class BizCustomerBo extends BaseEntity {
      */
     private String remark;
 
+    private BigDecimal settleAmount;
+
 }

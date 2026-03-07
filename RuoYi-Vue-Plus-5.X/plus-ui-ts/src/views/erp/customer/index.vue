@@ -122,12 +122,24 @@
             <span v-if="Number(scope.row.totalOweAmount) > 0" style="color: #F56C6C; font-weight: bold;">
               ￥{{ Number(scope.row.totalOweAmount).toFixed(2) }}
             </span>
+            <span v-else-if="Number(scope.row.totalOweAmount) < 0" style="color: #409EFF; font-weight: bold;">
+              预存: ￥{{ Math.abs(Number(scope.row.totalOweAmount)).toFixed(2) }}
+            </span>
             <span v-else style="color: #67C23A;">￥0.00</span>
           </template>
         </el-table-column>
 
-        <el-table-column label="操作" align="center" width="220" fixed="right" class-name="small-padding fixed-width">
+        <el-table-column label="操作" align="center" width="280" fixed="right" class-name="small-padding fixed-width">
           <template #default="scope">
+            <el-button 
+              v-if="Number(scope.row.totalOweAmount) > 0" 
+              link 
+              type="warning" 
+              icon="Money" 
+              @click="handleSettle(scope.row)" 
+              v-hasPermi="['erp:customer:edit']"
+            >手工结清</el-button>
+
             <el-button link type="success" icon="View" @click="handleView(scope.row)" v-hasPermi="['erp:customer:query']">详情</el-button>
             <el-button link type="primary" icon="Edit" @click="handleUpdate(scope.row)" v-hasPermi="['erp:customer:edit']">修改</el-button>
             <el-button link type="danger" icon="Delete" @click="handleDelete(scope.row)" v-hasPermi="['erp:customer:remove']">删除</el-button>
@@ -137,6 +149,26 @@
 
       <pagination v-show="total > 0" :total="total" v-model:page="queryParams.pageNum" v-model:limit="queryParams.pageSize" @pagination="getList" />
     </el-card>
+
+    <el-dialog title="手工结清账款" v-model="settleDialog.visible" width="450px" append-to-body>
+      <el-form ref="settleFormRef" :model="settleForm" label-width="100px">
+        <el-form-item label="当前欠款：">
+          <span style="color: #F56C6C; font-weight: bold; font-size: 18px;">￥{{ Number(currentSettleCustomer.totalOweAmount || 0).toFixed(2) }}</span>
+        </el-form-item>
+        <el-form-item label="结清金额：" required>
+          <el-input-number v-model="settleForm.settleAmount" :min="0.01" :precision="2" style="width: 100%" placeholder="请输入实际打款/收款金额" />
+        </el-form-item>
+        <el-form-item label="结清备注：">
+          <el-input v-model="settleForm.remark" type="textarea" placeholder="请输入流水凭证号或付款备注" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <div class="dialog-footer">
+          <el-button type="primary" :loading="settleLoading" @click="submitSettle">确 认 结 清</el-button>
+          <el-button @click="settleDialog.visible = false">取 消</el-button>
+        </div>
+      </template>
+    </el-dialog>
 
     <el-dialog :title="dialog.title" v-model="dialog.visible" width="800px" append-to-body>
       <el-form ref="customerFormRef" :model="form" :rules="rules" label-width="110px" :disabled="isView">
@@ -261,8 +293,10 @@
 </template>
 
 <script setup name="Customer" lang="ts">
+// 👉 新增：引入 request 使得能直接调用 /erp/customer/settle 接口
+import request from '@/utils/request';
 import { listCustomer, getCustomer, delCustomer, addCustomer, updateCustomer } from "@/api/erp/customer";
-import { CustomerVO, CustomerQuery, CustomerForm } from "@/api/erp/customer/types";
+import { CustomerVO } from "@/api/erp/customer/types";
 import { pcaTextArr } from "element-china-area-data";
 import { ComponentInternalInstance, getCurrentInstance, onMounted, reactive, ref, toRefs } from 'vue';
 
@@ -289,6 +323,12 @@ const dialog = reactive({
   visible: false,
   title: "",
 });
+
+// 👉 新增：结清账款相关的状态和表单数据
+const settleDialog = reactive({ visible: false });
+const settleLoading = ref(false);
+const currentSettleCustomer = ref<any>({});
+const settleForm = ref({ id: undefined, settleAmount: undefined, remark: '' });
 
 const initFormData: any = {
   companyName: undefined,
@@ -452,6 +492,38 @@ const handleView = async (row?: CustomerVO) => {
   dialog.title = "客户详情";
 };
 
+// 👉 新增：点击手工结清按钮触发
+const handleSettle = (row: any) => {
+  currentSettleCustomer.value = row;
+  settleForm.value = {
+    id: row.id,
+    settleAmount: row.totalOweAmount, // 默认带出全部欠款
+    remark: ''
+  };
+  settleDialog.visible = true;
+};
+
+// 👉 新增：提交结清表单
+const submitSettle = async () => {
+  if (!settleForm.value.settleAmount) {
+    proxy?.$modal.msgError("请输入结清金额");
+    return;
+  }
+  settleLoading.value = true;
+  try {
+    await request({
+      url: '/erp/customer/settle',
+      method: 'post',
+      data: settleForm.value
+    });
+    proxy?.$modal.msgSuccess("账款核销成功！已自动生成财务流水。");
+    settleDialog.visible = false;
+    getList(); // 刷新表格数据，此时欠款将扣减
+  } finally {
+    settleLoading.value = false;
+  }
+};
+
 const submitForm = () => {
   customerFormRef.value?.validate(async (valid: boolean) => {
     if (valid) {
@@ -484,7 +556,6 @@ const handleDelete = async (row?: CustomerVO) => {
 };
 
 const handleExport = () => {
-  // 隔离查询参数，安全导出
   const exportParams: any = JSON.parse(JSON.stringify(queryParams.value));
   exportParams.params = undefined; 
   proxy?.download(

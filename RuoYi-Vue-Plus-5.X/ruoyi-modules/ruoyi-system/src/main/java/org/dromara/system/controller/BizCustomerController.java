@@ -102,4 +102,15 @@ public class BizCustomerController extends BaseController {
                           @PathVariable Long[] ids) {
         return toAjax(bizCustomerService.deleteWithValidByIds(List.of(ids), true));
     }
+
+    /**
+     * 手动结清客户/供应商账款
+     */
+    @PostMapping("/settle")
+    public R<Void> settleCustomerDebt(@RequestBody BizCustomerBo bo) {
+        // 因为是额外动作，建议你新建一个 SettleBo，或者借用现有的 bo，只要有 id, 结算金额, 备注即可。
+        // 这里假设你在 BizCustomerBo 中临时加了 settleAmount 和 remark 字段
+        bizCustomerService.settleDebt(bo);
+        return R.ok();
+    }
 }
