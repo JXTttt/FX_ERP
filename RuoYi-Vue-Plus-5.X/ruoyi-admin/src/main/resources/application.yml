@@ -50,7 +50,7 @@ user:
 # Spring配置
 spring:
   application:
-    name: RuoYi-Vue-Plus
+    name: FX-ERP
   threads:
     # 开启虚拟线程 仅jdk21可用
     virtual:
@@ -182,7 +182,7 @@ api-decrypt:
 springdoc:
   api-docs:
     # 是否开启接口文档
-    enabled: true
+    enabled: false
   info:
     # 标题
     title: '标题：RuoYi-Vue-Plus多租户管理系统_接口文档'
@@ -252,9 +252,9 @@ websocket:
 --- # warm-flow工作流配置
 warm-flow:
   # 是否开启工作流，默认true
-  enabled: true
+  enabled: false
   # 是否开启设计器ui
-  ui: true
+  ui: false
   # 是否显示流程图顶部文字
   top-text-show: true
   # 是否渲染节点悬浮提示，默认true

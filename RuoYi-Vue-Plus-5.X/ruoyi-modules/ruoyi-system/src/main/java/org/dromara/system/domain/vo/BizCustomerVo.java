@@ -68,13 +68,22 @@ public class BizCustomerVo implements Serializable {
     @ColumnWidth(20)
     private String supplierCategory;
 
+    private String companyProvince;
+    private String companyCity;
+    private String companyDistrict;
+
     @ExcelProperty(value = "公司详细地址")
     @ColumnWidth(35)
     private String companyAddress;
 
+    private String deliveryProvince;
+    private String deliveryCity;
+    private String deliveryDistrict;
+
     @ExcelProperty(value = "收货详细地址")
     @ColumnWidth(35)
     private String deliveryAddress;
+    private String deliveryUnit;
 
     @ExcelProperty(value = "银行账户信息")
     @ColumnWidth(30)
@@ -92,5 +101,6 @@ public class BizCustomerVo implements Serializable {
     @ColumnWidth(25)
     private String remark;
 
+    private Long salesManId;
     // 省略了 createBy, createTime 等无用字段，它们再也不会出现在 Excel 里了！
 }

@@ -271,8 +271,21 @@
             </el-form-item>
           </el-col>
           <el-col :span="24">
-            <el-form-item label="业务员ID" prop="salesManId">
-              <el-input v-model="form.salesManId" placeholder="关联sys_user" />
+            <el-form-item label="业务员" prop="salesManId">
+              <el-select 
+                v-model="form.salesManId" 
+                placeholder="请选择业务员" 
+                filterable 
+                clearable
+                style="width: 100%"
+              >
+                <el-option
+                  v-for="user in userList"
+                  :key="user.userId"
+                  :label="user.nickName" 
+                  :value="user.userId"
+                />
+              </el-select>
             </el-form-item>
           </el-col>
           <el-col :span="24">
@@ -299,6 +312,7 @@ import { listCustomer, getCustomer, delCustomer, addCustomer, updateCustomer } f
 import { CustomerVO } from "@/api/erp/customer/types";
 import { pcaTextArr } from "element-china-area-data";
 import { ComponentInternalInstance, getCurrentInstance, onMounted, reactive, ref, toRefs } from 'vue';
+import { listUser } from "@/api/system/user";
 
 const { proxy } = getCurrentInstance() as ComponentInternalInstance;
 const { erp_customer_type, erp_supplier_category } = toRefs<any>(proxy?.useDict("erp_customer_type", "erp_supplier_category"));
@@ -312,6 +326,7 @@ const single = ref(true);
 const multiple = ref(true);
 const total = ref(0);
 const isView = ref(false);
+const userList = ref<any[]>([]);
 
 const companyRegion = ref<string[]>([]); 
 const deliveryRegion = ref<string[]>([]); 
@@ -565,7 +580,23 @@ const handleExport = () => {
   );
 };
 
+// 👉 3. 获取用户列表的方法
+const getUserList = async () => {
+  try {
+    // 传个大点的 pageSize 保证拉取全量人员，且只查状态正常(status: '0')的员工
+    const res = await listUser({ 
+      pageNum: 1, 
+      pageSize: 1000, 
+      status: '0' 
+    });
+    userList.value = res.rows;
+  } catch (error) {
+    console.error("获取业务员列表失败", error);
+  }
+};
+
 onMounted(() => {
+  getUserList();
   getList();
 });
 </script>
