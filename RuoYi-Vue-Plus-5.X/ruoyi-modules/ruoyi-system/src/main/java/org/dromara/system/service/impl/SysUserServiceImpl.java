@@ -89,6 +89,12 @@ public class SysUserServiceImpl implements ISysUserService, UserService {
     private Wrapper<SysUser> buildQueryWrapper(SysUserBo user) {
         Map<String, Object> params = user.getParams();
         LambdaQueryWrapper<SysUser> wrapper = Wrappers.lambdaQuery();
+
+        // 👇 核心防御代码：只要当前登录的不是超管，就强制过滤掉 user_id = 1 的超级管理员账号 👇
+        if (!LoginHelper.isSuperAdmin()) {
+            wrapper.ne(SysUser::getUserId, 1L);
+        }
+
         wrapper.eq(SysUser::getDelFlag, SystemConstants.NORMAL)
             .eq(ObjectUtil.isNotNull(user.getUserId()), SysUser::getUserId, user.getUserId())
             .in(StringUtils.isNotBlank(user.getUserIds()), SysUser::getUserId, StringUtils.splitTo(user.getUserIds(), Convert::toLong))

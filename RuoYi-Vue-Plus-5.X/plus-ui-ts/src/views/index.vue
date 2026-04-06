@@ -31,18 +31,18 @@
           <div class="section-block">
             <div class="section-title">快捷操作</div>
             <div class="shortcut-grid">
-              <div class="shortcut-item" @click="openWoDialog">
+              <!-- <div class="shortcut-item" @click="openWoDialog">
                 <div class="icon-box"><svg-icon icon-class="form" class="svg-icon" /></div>
                 <span>添加生产单</span>
-              </div>
+              </div> -->
               <div class="shortcut-item" @click="goTo('/workOrder')">
                 <div class="icon-box"><svg-icon icon-class="documentation" class="svg-icon" /></div>
                 <span>生产工单</span>
               </div>
-              <div class="shortcut-item" @click="goTo('/')">
+              <!-- <div class="shortcut-item" @click="goTo('/')">
                 <div class="icon-box"><svg-icon icon-class="chart" class="svg-icon" /></div>
                 <span>生产报表</span>
-              </div>
+              </div> -->
               <div class="shortcut-item" @click="goTo('/inventory')">
                 <div class="icon-box"><svg-icon icon-class="dict" class="svg-icon" /></div>
                 <span>库存管理</span>
@@ -51,10 +51,10 @@
                 <div class="icon-box"><svg-icon icon-class="money" class="svg-icon" /></div>
                 <span>支出开销</span>
               </div>
-              <div class="shortcut-item" @click="goTo('/')">
+              <!-- <div class="shortcut-item" @click="goTo('/')">
                 <div class="icon-box"><svg-icon icon-class="cascader" class="svg-icon" /></div>
                 <span>查看账务</span>
-              </div>
+              </div> -->
               <div class="shortcut-item" @click="openCustomerDialog">
                 <div class="icon-box"><svg-icon icon-class="peoples" class="svg-icon" /></div>
                 <span>添加新客户</span>

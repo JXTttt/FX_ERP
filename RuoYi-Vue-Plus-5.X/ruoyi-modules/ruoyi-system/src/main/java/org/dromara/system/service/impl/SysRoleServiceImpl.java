@@ -88,6 +88,12 @@ public class SysRoleServiceImpl implements ISysRoleService, RoleService {
             .between(params.get("beginTime") != null && params.get("endTime") != null,
                 SysRole::getCreateTime, params.get("beginTime"), params.get("endTime"))
             .orderByAsc(SysRole::getRoleSort).orderByAsc(SysRole::getCreateTime);
+
+        // 👇 核心防御代码：只要当前登录的不是超管，就强制加上 role_id != 1 的查询条件 👇
+        if (!LoginHelper.isSuperAdmin()) {
+            wrapper.ne(SysRole::getRoleId, 1L);
+        }
+
         return wrapper;
     }
 

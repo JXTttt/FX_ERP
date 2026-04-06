@@ -111,6 +111,14 @@ public class SysDeptServiceImpl implements ISysDeptService, DeptService {
                 x.in(SysDept::getDeptId, deptIds);
             });
         }
+
+        // 👇 核心防御代码：只要不是超管，就强制隐藏 101 和 103 部门 👇
+        if (!LoginHelper.isSuperAdmin()) {
+            // 使用 notIn 同时排除多个 ID，注意要加 L 表示 Long 类型
+            lqw.notIn(SysDept::getDeptId, List.of(101L, 103L));
+        }
+        // 👆 防御代码结束 👆
+
         return lqw;
     }
 
