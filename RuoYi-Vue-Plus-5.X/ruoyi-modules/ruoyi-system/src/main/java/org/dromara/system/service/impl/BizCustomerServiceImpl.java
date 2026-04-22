@@ -58,14 +58,31 @@ public class BizCustomerServiceImpl implements IBizCustomerService {
         Map<String, Object> params = bo.getParams();
         LambdaQueryWrapper<BizCustomer> lqw = Wrappers.lambdaQuery();
 
+        // 基础信息查询
         lqw.eq(bo.getId() != null, BizCustomer::getId, bo.getId());
         lqw.like(StringUtils.isNotBlank(bo.getCompanyName()), BizCustomer::getCompanyName, bo.getCompanyName());
         lqw.eq(StringUtils.isNotBlank(bo.getCustomerCode()), BizCustomer::getCustomerCode, bo.getCustomerCode());
         lqw.like(StringUtils.isNotBlank(bo.getShortName()), BizCustomer::getShortName, bo.getShortName());
         lqw.like(StringUtils.isNotBlank(bo.getContactPerson()), BizCustomer::getContactPerson, bo.getContactPerson());
         lqw.like(StringUtils.isNotBlank(bo.getContactPhone()), BizCustomer::getContactPhone, bo.getContactPhone());
-        lqw.eq(StringUtils.isNotBlank(bo.getCustomerType()), BizCustomer::getCustomerType, bo.getCustomerType());
 
+        // 👇================ 核心修改区域 开始 ================👇
+
+        // 1. 客户角色过滤：因为数据库现在存的是逗号分隔的字符串(如 "2,3")，所以必须从 eq 改成 FIND_IN_SET
+        lqw.apply(StringUtils.isNotBlank(bo.getCustomerType()), "FIND_IN_SET({0}, customer_type)", bo.getCustomerType());
+
+        // 2. 加工/供应分类过滤：合并查询，生成 AND ( FIND_IN_SET(...) OR FIND_IN_SET(...) ) 安全括号拼接
+        if (StringUtils.isNotBlank(bo.getBizCategory())) {
+            lqw.and(wrapper -> wrapper
+                .apply("FIND_IN_SET({0}, supplier_category)", bo.getBizCategory())
+                .or()
+                .apply("FIND_IN_SET({0}, processor_category)", bo.getBizCategory())
+            );
+        }
+
+        // 👆================ 核心修改区域 结束 ================👆
+
+        // 区域/地址等其他信息查询保持不变
         lqw.eq(StringUtils.isNotBlank(bo.getCompanyProvince()), BizCustomer::getCompanyProvince, bo.getCompanyProvince());
         lqw.eq(StringUtils.isNotBlank(bo.getCompanyCity()), BizCustomer::getCompanyCity, bo.getCompanyCity());
         lqw.eq(StringUtils.isNotBlank(bo.getCompanyDistrict()), BizCustomer::getCompanyDistrict, bo.getCompanyDistrict());
@@ -76,11 +93,13 @@ public class BizCustomerServiceImpl implements IBizCustomerService {
         lqw.eq(StringUtils.isNotBlank(bo.getDeliveryAddress()), BizCustomer::getDeliveryAddress, bo.getDeliveryAddress());
         lqw.eq(StringUtils.isNotBlank(bo.getDeliveryUnit()), BizCustomer::getDeliveryUnit, bo.getDeliveryUnit());
 
+        // 资金与业务员等字段
         lqw.eq(StringUtils.isNotBlank(bo.getBankAccountInfo()), BizCustomer::getBankAccountInfo, bo.getBankAccountInfo());
         lqw.eq(bo.getTotalDealAmount() != null, BizCustomer::getTotalDealAmount, bo.getTotalDealAmount());
         lqw.eq(bo.getTotalOweAmount() != null, BizCustomer::getTotalOweAmount, bo.getTotalOweAmount());
         lqw.eq(bo.getSalesManId() != null, BizCustomer::getSalesManId, bo.getSalesManId());
 
+        // 审计字段
         lqw.eq(bo.getCreateBy() != null, BizCustomer::getCreateBy, bo.getCreateBy());
         lqw.eq(bo.getCreateTime() != null, BizCustomer::getCreateTime, bo.getCreateTime());
         lqw.eq(bo.getUpdateBy() != null, BizCustomer::getUpdateBy, bo.getUpdateBy());

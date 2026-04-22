@@ -168,58 +168,71 @@
           </div>
           <el-table :data="form.productList" border size="small" style="width: 100%; margin-bottom: 20px;">
             <el-table-column type="index" width="50" align="center" label="序号" />
-            <el-table-column label="产品名称(必填)" min-width="150">
+            
+            <el-table-column label="产品名称(必填)" min-width="200">
               <template #default="scope">
                 <el-input v-model="scope.row.productName" placeholder="产品名称" />
               </template>
             </el-table-column>
-            <el-table-column label="专属交期" width="140">
+            
+            <el-table-column label="专属交期" width="145">
               <template #default="scope">
                 <el-date-picker clearable v-model="scope.row.deliveryDate" type="date" value-format="YYYY-MM-DD" placeholder="为空则用总交期" style="width: 100%" />
               </template>
             </el-table-column>
-            <el-table-column label="客户PO号" width="110">
+            
+            <el-table-column label="客户PO号" width="125">
               <template #default="scope"><el-input v-model="scope.row.customerPo" placeholder="PO号" /></template>
             </el-table-column>
-            <el-table-column label="客户物料号" width="110">
+            
+            <el-table-column label="客户物料号" width="125">
               <template #default="scope"><el-input v-model="scope.row.customerMaterialNo" placeholder="物料号" /></template>
             </el-table-column>
-            <el-table-column label="规格" width="110">
+            
+            <el-table-column label="规格" width="125">
               <template #default="scope"><el-input v-model="scope.row.spec" placeholder="长x宽x高" /></template>
             </el-table-column>
-            <el-table-column label="层数" width="90">
+            
+            <el-table-column label="层数" width="100">
               <template #default="scope">
-                <el-select v-model="scope.row.layers" placeholder="层数" allow-create filterable>
+                <el-select v-model="scope.row.layers" placeholder="层数" allow-create filterable @blur="(e: any) => handleSelectBlur(e, scope.row, 'layers')">
                   <el-option label="单E" value="单E" /><el-option label="单B" value="单B" />
                   <el-option label="EE" value="EE" /><el-option label="BB" value="BB" />
                 </el-select>
               </template>
             </el-table-column>
-            <el-table-column label="刀版号" width="100">
+            
+            <el-table-column label="刀版号" width="140">
               <template #default="scope"><el-input v-model="scope.row.knifePlateNo" placeholder="刀版号" /></template>
             </el-table-column>
-            <el-table-column label="订单数量" width="100">
+            
+            <el-table-column label="订单数量" width="90">
               <template #default="scope">
                 <el-input-number v-model="scope.row.orderQuantity" :min="1" style="width: 100%" :controls="false" @change="(val) => handleOrderQtyChange(val as number, scope.row)" />
               </template>
             </el-table-column>
-            <el-table-column label="生产数量" width="100">
+            
+            <el-table-column label="生产数量" width="90">
               <template #default="scope">
                 <el-input-number v-model="scope.row.produceQuantity" :min="1" style="width: 100%" :controls="false" @change="calcProductTotal(scope.row)" />
               </template>
             </el-table-column>
-            <el-table-column label="单位" width="60">
+            
+            <el-table-column label="单位" width="55">
               <template #default="scope"><el-input v-model="scope.row.unit" placeholder="个" /></template>
             </el-table-column>
+            
             <el-table-column label="单价" width="80">
               <template #default="scope">
                 <el-input-number v-model="scope.row.unitPrice" :precision="4" :step="0.1" :min="0" :controls="false" style="width: 100%" @change="calcProductTotal(scope.row)" />
               </template>
             </el-table-column>
-            <el-table-column label="总金额" width="90">
+            
+            <el-table-column label="总金额" width="110">
               <template #default="scope"><el-input v-model="scope.row.totalAmount" disabled /></template>
             </el-table-column>
-            <el-table-column label="操作" width="60" align="center" fixed="right" v-if="!isView">
+            
+            <el-table-column label="操作" width="70" align="center" fixed="right" v-if="!isView">
               <template #default="scope">
                 <el-button link type="danger" @click="removeLine('productList', scope.$index)">移除</el-button>
               </template>
@@ -232,7 +245,7 @@
               <el-table :data="form.materialList" border size="small" style="width: 100%;">
                 <el-table-column label="部件(必填)" width="140">
                   <template #default="scope">
-                    <el-select v-model="scope.row.partName" placeholder="纸张/配件" allow-create filterable default-first-option>
+                    <el-select v-model="scope.row.partName" placeholder="纸张/配件" allow-create filterable default-first-option @blur="(e: any) => handleSelectBlur(e, scope.row, 'partName')">
                       <el-option v-for="dict in erp_item_type" :key="dict.value" :label="dict.label" :value="dict.label" />
                     </el-select>
                   </template>
@@ -246,7 +259,7 @@
                 </el-table-column>
                 <el-table-column label="物料名称(必填)" min-width="150">
                   <template #default="scope">
-                    <el-select v-model="scope.row.paperName" filterable allow-create default-first-option placeholder="选库存/自填" style="width: 100%" @change="(val) => handleMaterialChange(val as string, scope.row)">
+                    <el-select v-model="scope.row.paperName" filterable allow-create default-first-option placeholder="选库存/自填" style="width: 100%" @change="(val) => handleMaterialChange(val as string, scope.row)" @blur="(e: any) => handleSelectBlur(e, scope.row, 'paperName')">
                       <el-option-group v-for="group in inventoryOptions" :key="group.label" :label="group.label">
                         <el-option v-for="item in group.options" :key="item.id || item.itemName" :label="item.itemName" :value="item.itemName">
                           <span style="float: left">{{ item.itemName }}</span>
@@ -263,7 +276,7 @@
                 </el-table-column>
                 <el-table-column label="数量" width="160">
                   <template #default="scope">
-                    <el-input-number v-model="scope.row.requireQty" :min="0" style="width: 100%" @change="(val) => checkMaterialQty(val as number, scope.row)" />
+                    <el-input-number v-model="scope.row.requireQty" :min="0" :controls="false" style="width: 100%" @change="(val) => checkMaterialQty(val as number, scope.row)" />
                   </template>
                 </el-table-column>
                 <el-table-column label="切成" width="160">
@@ -317,16 +330,19 @@
                 <el-table-column label="印刷机号/机台" min-width="140">
                   <template #default="scope"><el-input v-model="scope.row.machineNo" placeholder="如: 联丰/对开海德堡" /></template>
                 </el-table-column>
-                <el-table-column label="印刷方式" width="120">
+                <el-table-column label="印刷方式" width="130">
                   <template #default="scope">
-                    <el-select v-model="scope.row.printMethod" allow-create filterable placeholder="如: 单面">
-                      <el-option label="单面" value="单面" /><el-option label="正反" value="正反" />
-                      <el-option label="自反" value="自反" /><el-option label="天地反" value="天地反" />
+                    <el-select v-model="scope.row.printMethod" allow-create filterable default-first-option placeholder="选/填" style="width: 100%" @blur="(e: any) => handleSelectBlur(e, scope.row, 'printMethod')">
+                      <el-option v-for="dict in erp_print_type" :key="dict.value" :label="dict.label" :value="dict.label" />
                     </el-select>
                   </template>
                 </el-table-column>
-                <el-table-column label="印刷颜色" width="110">
-                  <template #default="scope"><el-input v-model="scope.row.printColor" placeholder="4C / 4+0" /></template>
+                <el-table-column label="印刷颜色" width="130">
+                  <template #default="scope">
+                    <el-select v-model="scope.row.printColor" allow-create filterable default-first-option placeholder="选/填" style="width: 100%" @blur="(e: any) => handleSelectBlur(e, scope.row, 'printColor')">
+                      <el-option v-for="dict in erp_print_color" :key="dict.value" :label="dict.label" :value="dict.label" />
+                    </el-select>
+                  </template>
                 </el-table-column>
                 <el-table-column label="印刷尺寸" width="140">
                   <template #default="scope"><el-input v-model="scope.row.printSize" placeholder="如: 545*800mm" /></template>
@@ -350,14 +366,28 @@
             </el-tab-pane>
 
             <el-tab-pane label="生产工艺明细" name="processList">
-              <div class="mb-2" v-if="!isView"><el-button type="primary" plain icon="Plus" size="small" @click="addLine('processList')">添加工艺</el-button></div>
+              <div class="mb-2" v-if="!isView" style="display: flex; align-items: center; gap: 10px;">
+                <el-button type="primary" plain icon="Plus" size="small" @click="addLine('processList')">添加空行</el-button>
+                
+                <el-cascader
+                  v-model="batchProcessSelection"
+                  :options="processTreeData"
+                  :props="{ multiple: true, emitPath: false }"
+                  collapse-tags
+                  collapse-tags-tooltip
+                  clearable 
+                  filterable 
+                  placeholder="批量选择工艺(支持多级多选)" 
+                  style="width: 280px"
+                />
+                <el-button type="success" size="small" @click="confirmBatchAddProcess">批量添加至下方</el-button>
+                </div>
+
               <el-table :data="form.processList" border size="small" style="width: 100%;">
                 <el-table-column label="工序名称" width="280">
                   <template #default="scope">
-                    <el-select v-if="!isView" v-model="scope.row.processName" filterable allow-create default-first-option placeholder="选择标准工艺或自行输入" style="width: 100%">
-                      <el-option-group v-for="group in processTreeData" :key="group.value" :label="group.label">
-                        <el-option v-for="item in group.children" :key="item.value" :label="item.label" :value="group.value + ' - ' + item.value" />
-                      </el-option-group>
+                    <el-select v-if="!isView" v-model="scope.row.processName" filterable allow-create default-first-option placeholder="选择标准工艺或自行输入" style="width: 100%" @blur="(e: any) => handleSelectBlur(e, scope.row, 'processName')">
+                      <el-option v-for="dict in erp_process_name" :key="dict.value" :label="dict.label" :value="dict.label" />
                     </el-select>
                     <span v-else>{{ scope.row.processName }}</span>
                   </template>
@@ -375,13 +405,13 @@
             </el-tab-pane>
 
             <el-tab-pane label="模具制版" name="ctpList">
-              <div class="mb-2" v-if="!isView"><el-button type="primary" plain icon="Plus" size="small" @click="addLine('ctpList')">添加CTP</el-button></div>
+              <div class="mb-2" v-if="!isView"><el-button type="primary" plain icon="Plus" size="small" @click="addLine('ctpList')">添加模具</el-button></div>
               <el-table :data="form.ctpList" border size="small" style="width: 100%;">
                 <el-table-column label="部件" min-width="150"><template #default="scope"><el-input v-model="scope.row.partName" /></template></el-table-column>
                 <el-table-column label="开数" width="120"><template #default="scope"><el-input-number v-model="scope.row.openNum" :min="1" :max="9" style="width: 100%" :controls="false" /></template></el-table-column>
                 <el-table-column label="印刷方式" width="150">
                   <template #default="scope">
-                    <el-select v-model="scope.row.printType" allow-create filterable>
+                    <el-select v-model="scope.row.printType" allow-create filterable @blur="(e: any) => handleSelectBlur(e, scope.row, 'printType')">
                       <el-option label="单面" value="单面" /><el-option label="正反" value="正反" />
                       <el-option label="自反" value="自反" /><el-option label="天地反" value="天地反" />
                     </el-select>
@@ -396,44 +426,51 @@
             <el-tab-pane label="委外加工单" name="outsourcingList">
               <div class="mb-2" v-if="!isView"><el-button type="primary" plain icon="Plus" size="small" @click="addLine('outsourcingList')">手动添加外发</el-button></div>
               <el-table :data="form.outsourcingList" border size="small" style="width: 100%;" overflow-x="auto">
-                <el-table-column label="产品名称" width="150" fixed="left"><template #default="scope"><el-input v-model="scope.row.productName" /></template></el-table-column>
-                <el-table-column label="材料名称" width="150"><template #default="scope"><el-input v-model="scope.row.materialName" placeholder="输入材料" /></template></el-table-column>
-                <el-table-column label="长(mm)" width="100"><template #default="scope"><el-input-number v-model="scope.row.length" :controls="false" style="width: 100%" @change="calcTotalPrice(scope.row)"/></template></el-table-column>
-                <el-table-column label="宽(mm)" width="100"><template #default="scope"><el-input-number v-model="scope.row.width" :controls="false" style="width: 100%" @change="calcTotalPrice(scope.row)"/></template></el-table-column>
-                <el-table-column label="材料数量" width="110"><template #default="scope"><el-input-number v-model="scope.row.processQty" :controls="false" style="width: 100%" @change="calcTotalPrice(scope.row)" /></template></el-table-column>
+                <el-table-column label="产品名称" min-width="130" fixed="left"><template #default="scope"><el-input v-model="scope.row.productName" /></template></el-table-column>
+                <el-table-column label="材料名称" min-width="130"><template #default="scope"><el-input v-model="scope.row.materialName" placeholder="输入材料" /></template></el-table-column>
                 
-                <el-table-column label="加工工序" width="200">
+                <el-table-column label="长(mm)" width="75"><template #default="scope"><el-input-number v-model="scope.row.length" :controls="false" style="width: 100%" @change="calcTotalPrice(scope.row)"/></template></el-table-column>
+                <el-table-column label="宽(mm)" width="75"><template #default="scope"><el-input-number v-model="scope.row.width" :controls="false" style="width: 100%" @change="calcTotalPrice(scope.row)"/></template></el-table-column>
+                <el-table-column label="材料数量" width="90"><template #default="scope"><el-input-number v-model="scope.row.processQty" :controls="false" style="width: 100%" @change="calcTotalPrice(scope.row)" /></template></el-table-column>
+                
+                <el-table-column label="加工工序" width="130">
                   <template #default="scope">
-                    <el-select v-if="!isView" v-model="scope.row.processProject" filterable allow-create default-first-option placeholder="选择或输入" style="width: 100%">
-                      <el-option-group v-for="group in processTreeData" :key="group.value" :label="group.label">
-                        <el-option v-for="item in group.children" :key="item.value" :label="item.label" :value="group.value + ' - ' + item.value" />
-                      </el-option-group>
+                    <el-select v-if="!isView" v-model="scope.row.processProject" filterable allow-create default-first-option placeholder="选/填" style="width: 100%" @blur="(e: any) => handleSelectBlur(e, scope.row, 'processProject')">
+                      <el-option v-for="dict in erp_process_name" :key="dict.value" :label="dict.label" :value="dict.label" />
                     </el-select>
                     <span v-else>{{ scope.row.processProject }}</span>
                   </template>
                 </el-table-column>
                 
-                <el-table-column label="加工商" width="160">
+                <el-table-column label="加工商/供应商" width="130">
                   <template #default="scope">
-                    <el-select v-model="scope.row.supplierId" placeholder="智能匹配" filterable>
-                      <el-option v-for="item in getFilteredSuppliers(scope.row.processProject)" :key="String(item.id)" :label="item.companyName" :value="String(item.id)" />
+                    <el-select v-model="scope.row.supplierId" placeholder="选择加工商" filterable>
+                      <el-option 
+                        v-for="item in getFilteredSuppliers(scope.row.processProject)" 
+                        :key="String(item.id)" 
+                        :label="item.shortName || item.companyName" 
+                        :value="String(item.id)"
+                      >
+                        <span style="float: left">{{ item.shortName || item.companyName }}</span>
+                        <span style="float: right; color: #8492a6; font-size: 12px; margin-left: 10px;" v-if="item.shortName">{{ item.companyName }}</span>
+                      </el-option>
                     </el-select>
                   </template>
                 </el-table-column>
 
-                <el-table-column label="需良品数" width="110"><template #default="scope"><el-input-number v-model="scope.row.goodQty" :controls="false" style="width: 100%" @change="calcTotalPrice(scope.row)"/></template></el-table-column>
-                <el-table-column label="算价方式" width="110">
+                <el-table-column label="需良品数" width="90"><template #default="scope"><el-input-number v-model="scope.row.goodQty" :controls="false" style="width: 100%" @change="calcTotalPrice(scope.row)"/></template></el-table-column>
+                <el-table-column label="算价方式" width="85">
                   <template #default="scope">
                     <el-select v-model="scope.row.unit" @change="calcTotalPrice(scope.row)">
                       <el-option label="平方米" value="平方米"/><el-option label="张" value="张"/><el-option label="套" value="套"/>
                     </el-select>
                   </template>
                 </el-table-column>
-                <el-table-column label="加工单价" width="100"><template #default="scope"><el-input-number v-model="scope.row.unitPrice" :min="0" :precision="4" :controls="false" style="width: 100%" @change="calcTotalPrice(scope.row)"/></template></el-table-column>
+                <el-table-column label="加工单价" width="90"><template #default="scope"><el-input-number v-model="scope.row.unitPrice" :min="0" :precision="4" :controls="false" style="width: 100%" @change="calcTotalPrice(scope.row)"/></template></el-table-column>
                 <el-table-column label="加工金额" width="100"><template #default="scope"><el-input-number v-model="scope.row.totalPrice" :min="0" :precision="2" :controls="false" style="width: 100%" disabled/></template></el-table-column>
-                <el-table-column label="交货期" width="140"><template #default="scope"><el-date-picker v-model="scope.row.deliveryDate" type="date" value-format="YYYY-MM-DD" style="width: 100%" /></template></el-table-column>
-                <el-table-column label="备注" min-width="150"><template #default="scope"><el-input v-model="scope.row.remark" /></template></el-table-column>
-                <el-table-column label="操作" width="70" align="center" fixed="right" v-if="!isView">
+                <el-table-column label="交货期" width="145"><template #default="scope"><el-date-picker v-model="scope.row.deliveryDate" type="date" value-format="YYYY-MM-DD" style="width: 100%" /></template></el-table-column>
+                <el-table-column label="备注" min-width="120"><template #default="scope"><el-input v-model="scope.row.remark" /></template></el-table-column>
+                <el-table-column label="操作" width="60" align="center" fixed="right" v-if="!isView">
                   <template #default="scope">
                     <el-button link type="danger" @click="removeLine('outsourcingList', scope.$index)">移除</el-button>
                   </template>
@@ -582,6 +619,9 @@ import { ComponentInternalInstance, computed, onMounted, reactive, ref, toRefs, 
 import request from '@/utils/request'; 
 import JsBarcode from 'jsbarcode';
 import QRCode from 'qrcode';
+import { getDicts } from '@/api/system/dict/data';
+import { useRoute } from 'vue-router';
+
 
 type ElFormInstance = InstanceType<typeof import('element-plus').ElForm>;
 
@@ -591,8 +631,13 @@ interface DialogOption {
 }
 
 const { proxy } = getCurrentInstance() as ComponentInternalInstance;
-const { erp_item_type } = toRefs<any>(proxy?.useDict('erp_item_type'));
-
+const { 
+  erp_item_type, erp_process_name, erp_processor_category, 
+  erp_print_type, erp_print_color, erp_mold_name 
+} = toRefs<any>(proxy?.useDict(
+  'erp_item_type', 'erp_process_name', 'erp_processor_category', 
+  'erp_print_type', 'erp_print_color', 'erp_mold_name'
+));
 const workOrderList = ref([]);
 const buttonLoading = ref(false);
 const loading = ref(true);
@@ -600,7 +645,8 @@ const showSearch = ref(true);
 const total = ref(0);
 const isView = ref(false);
 const isDataLoading = ref(false); 
-
+const rawProcessDictOptions = ref<any[]>([]); // 👈 用于存放未被阉割的工艺字典数据
+const route = useRoute();
 const activeTab = ref('materialList');
 
 const customerOptions = ref<any[]>([]); 
@@ -625,6 +671,7 @@ const printMaterialRef = ref<any>();
 const printPrintRef = ref<any>();
 const printProcessRef = ref<any>();
 const printCtpRef = ref<any>();
+const rawMoldDictOptions = ref<any[]>([]);
 
 const printConfig = reactive({
   visible: false,
@@ -638,32 +685,6 @@ const printConfig = reactive({
   selectedCtps: [] as any[]
 });
 
-const processTreeData = [
-  { 
-    value: '表面处理', label: '表面处理', supplierCat: '2', 
-    children: [ 
-      {value: '过哑胶', label: '过哑胶'}, {value: '过光胶', label: '过光胶'}, 
-      {value: '烫金', label: '烫金'}, {value: '击凸', label: '击凸'},
-      {value: '压凹', label: '压凹'}, {value: '压纹', label: '压纹'},
-      {value: 'UV', label: 'UV'}, {value: '覆膜', label: '覆膜'},
-      {value: '局部UV', label: '局部UV'}, {value: '哑油', label: '哑油'},
-      {value: '光油（普通）', label: '光油（普通）'}, {value: '高光油', label: '高光油'}
-    ]
-  },
-  { 
-    value: '模切', label: '模切(啤机)', supplierCat: '3', 
-    children: [ {value: '普通模切', label: '普通模切'}, {value: '手工排废', label: '排废'} ]
-  },
-  { 
-    value: '裱坑', label: '裱坑', supplierCat: '1', 
-    children: [ {value: '对裱', label: '对裱'} ]
-  },
-  { 
-    value: '粘盒', label: '粘盒', supplierCat: '4', 
-    children: [ {value: '机粘', label: '机粘'}, {value: '手工粘', label: '手工粘'} ]
-  }
-];
-
 const initFormData: any = {
   id: undefined, 
   customerId: undefined, 
@@ -672,7 +693,7 @@ const initFormData: any = {
   deliveryDate: undefined,
   packRequirement: undefined, 
   remark: undefined,
-  productList: [],    
+  productList: [],   
   materialList: [], 
   ctpList: [], 
   processList: [], 
@@ -689,6 +710,23 @@ const data = reactive<any>({
   }
 });
 const { queryParams, form, rules } = toRefs(data);
+
+// ==========================
+// 针对免回车输入的优化处理方法
+// ==========================
+const handleSelectBlur = (e: any, row: any, field: string) => {
+  // 设置一个极短的延迟，防止覆盖下拉列表中正常点选时的值触发
+  setTimeout(() => {
+    const val = e.target.value;
+    if (val && row[field] !== val) {
+      row[field] = val;
+      // 如果是物料名称，同时触发联动的查询逻辑
+      if (field === 'paperName') {
+        handleMaterialChange(val, row);
+      }
+    }
+  }, 100);
+};
 
 const getCustomerList = async () => {
   const res = await listCustomer({ pageNum: 1, pageSize: 1000 } as any);
@@ -816,16 +854,55 @@ const calcTotalPrice = (row: any) => {
   }
 };
 
-const getFilteredSuppliers = (processProject: string) => {
-  if (!processProject) return customerOptions.value.filter(c => c.customerType === '2');
-  const majorCategory = processProject.split(' - ')[0];
-  const treeNode = processTreeData.find(item => item.value === majorCategory);
-  if (!treeNode || !treeNode.supplierCat) return customerOptions.value.filter(c => c.customerType === '2');
-  const reqCat = treeNode.supplierCat;
-  return customerOptions.value.filter(c => {
-    if (c.customerType !== '2' || !c.supplierCategory) return false; 
-    const catArray = typeof c.supplierCategory === 'string' ? c.supplierCategory.split(',') : c.supplierCategory;
-    return catArray.includes(reqCat);
+const getFilteredSuppliers = (processProject: string | undefined | null) => {
+  const toArray = (val: any): string[] => {
+    if (!val) return [];
+    return Array.isArray(val) ? val.map(String) : String(val).split(',');
+  };
+
+  const options: any[] = customerOptions.value || [];
+
+  // 1. 如果没有选择工序，展示所有【供应商(2)】和【加工商(3)】
+  if (!processProject) {
+    return options.filter((c: any) => {
+      const types = toArray(c.customerType);
+      return types.includes('2') || types.includes('3');
+    });
+  }
+
+  // 2. 💡 重点修改：去【未阉割的完整字典列表】中查找，匹配原生的 dictLabel 字段
+  const dictItem = rawProcessDictOptions.value.find((d: any) => d.dictLabel === processProject || d.dictValue === processProject);
+
+  // 提取备注里的分类ID（加个 trim 防止你配置字典时不小心多敲了空格）
+  const targetCatId = dictItem?.remark?.trim(); 
+
+  // 3. 智能兜底：如果这个工艺在字典里没有配置备注(分类)，直接放开所有供选择！
+  if (!targetCatId) {
+    return options.filter((c: any) => {
+      const types = toArray(c.customerType);
+      return types.includes('2') || types.includes('3');
+    });
+  }
+
+  // 4. 精准匹配逻辑
+  return options.filter((c: any) => {
+    const types = toArray(c.customerType);
+    let matchSupplier = false;
+    let matchProcessor = false;
+
+    // 校验 A：作为供应商 (2) 时，看他的供应商类型是否匹配
+    if (types.includes('2')) {
+      const supCats = toArray(c.supplierCategory || c.supplierType);
+      matchSupplier = supCats.includes(targetCatId);
+    }
+
+    // 校验 B：作为加工商 (3) 时，看他的加工商类型是否匹配
+    if (types.includes('3')) {
+      const procCats = toArray(c.processorCategory || c.processorType);
+      matchProcessor = procCats.includes(targetCatId);
+    }
+
+    return matchSupplier || matchProcessor;
   });
 };
 
@@ -852,12 +929,10 @@ const handleToOutsourcing = (processRow: any) => {
   const exists = form.value.outsourcingList.find((item: any) => item.processProject === processRow.processName);
   if (exists) { proxy?.$modal.msgWarning(`【${processRow.processName}】已转过委外！`); return; }
 
-  // 获取第一条材料，用来作为默认推算依据
   const firstMat = form.value.materialList.length > 0 ? form.value.materialList[0] : null;
   
   form.value.outsourcingList.push({
     productName: combinedProductNames.value, 
-    // 👉 核心修改：带入材料名称 (兼容旧的 paperName)
     materialName: firstMat ? (firstMat.paperName || '') : '',
     length: firstMat ? parseSize(firstMat.paperSize, 'L') : 0,
     width: firstMat ? parseSize(firstMat.paperSize, 'W') : 0,
@@ -870,6 +945,8 @@ const handleToOutsourcing = (processRow: any) => {
   });
   proxy?.$modal.msgSuccess(`转委外成功！已自动填入委外加工单，请去分配加工商。`);
 };
+
+
 
 const handleToExtraPurchase = (row: any) => {
   if (!row.paperName) {
@@ -898,13 +975,112 @@ const handleToExtraPurchase = (row: any) => {
   });
 };
 
+// ==========================
+// 添加产品明细核心：生成自动刀版号
+// ==========================
 const addProductLine = () => {
   form.value.productList.push({
-    productName: '', customerPo: '', customerMaterialNo: '', spec: '', layers: '', knifePlateNo: '',
+    productName: '', customerPo: '', customerMaterialNo: '', spec: '', layers: '', 
+    knifePlateNo: '', // 👈 这里改成空字符串，让后端 Redis 自动接管
     orderQuantity: undefined, produceQuantity: undefined, unit: '个', unitPrice: undefined, totalAmount: 0.00,
     deliveryDate: undefined 
   });
 };
+
+// ==========================
+// 动态构建工艺树 & 批量选择逻辑
+// ==========================
+
+// 💡 核心：自动将扁平的数据字典，根据备注关联组装成多级下拉树
+const processTreeData = computed(() => {
+  const tree: any[] = [];
+  const categories = erp_processor_category.value || [];
+  const processes = rawProcessDictOptions.value || [];
+
+  // 1. 遍历加工商的分类，作为树的【父节点】
+  categories.forEach((cat: any) => {
+    const parentNode = {
+      value: cat.label, 
+      label: cat.label,
+      children: [] as any[]
+    };
+    
+    // 2. 找到所有备注(remark)等于分类ID的工艺，放入该父节点下
+    processes.forEach((proc: any) => {
+      if (proc.remark && proc.remark.trim() === String(cat.value)) {
+        parentNode.children.push({
+          value: proc.dictLabel, // 叶子节点的值存中文名称
+          label: proc.dictLabel
+        });
+      }
+    });
+    
+    // 只有下面有子工艺的分类才会显示出来
+    if (parentNode.children.length > 0) {
+      tree.push(parentNode);
+    }
+  });
+
+  // 3. 兜底保护：把没配置备注的工艺，自动收拢到“其他未分类”下
+  const unclassifiedNode = {
+    value: '其他未分类',
+    label: '其他工艺(未配置关联)',
+    children: [] as any[]
+  };
+  processes.forEach((proc: any) => {
+    if (!proc.remark || !categories.find((c: any) => String(c.value) === proc.remark.trim())) {
+      unclassifiedNode.children.push({
+        value: proc.dictLabel,
+        label: proc.dictLabel
+      });
+    }
+  });
+
+  if (unclassifiedNode.children.length > 0) {
+    tree.push(unclassifiedNode);
+  }
+
+  return tree;
+});
+
+// 绑定的多选数组 (因为配置了 emitPath: false，这里存的只会是叶子节点的值，如 ['过哑胶', '烫金'])
+const batchProcessSelection = ref<string[]>([]);
+
+// 确认批量添加至表格
+const confirmBatchAddProcess = () => {
+  if (!batchProcessSelection.value || batchProcessSelection.value.length === 0) {
+    proxy?.$modal.msgWarning("请先展开级联菜单并勾选至少一项工艺！");
+    return;
+  }
+
+  let addedCount = 0;
+  if (!form.value.processList) {
+    form.value.processList = [];
+  }
+
+  batchProcessSelection.value.forEach(processName => {
+    // 查重：已经在列表里的工艺不再重复添加
+    const exists = form.value.processList.find((p: any) => p.processName === processName);
+    
+    if (!exists) {
+      form.value.processList.push({
+        processName: processName,
+        remark: '' 
+      });
+      addedCount++;
+    }
+  });
+
+  if (addedCount > 0) {
+    proxy?.$modal.msgSuccess(`成功批量生成 ${addedCount} 项工艺明细！`);
+  } else {
+    proxy?.$modal.msgWarning("您勾选的工艺已全部存在于明细中，未重复添加。");
+  }
+
+  // 添加完成后自动清空输入框，保持界面清爽
+  batchProcessSelection.value = []; 
+};
+
 const addLine = (listName: string) => { form.value[listName].push({}); };
 const removeLine = (listName: string, index: number) => { form.value[listName].splice(index, 1); };
 
@@ -1218,7 +1394,7 @@ const executePrint = async () => {
           <div>
             <h1>梵熙纸业 生产流转单</h1>
             <div style="margin-top:10px; font-size:14px;">
-              客户名称：<strong>${wo.customerName || ''}</strong> &nbsp;&nbsp;&nbsp;&nbsp; 
+              客户名称：<strong>${wo.customerName || ''}</strong>     
               交货日期：<strong>${safeDate}</strong>
             </div>
           </div>
@@ -1366,7 +1542,6 @@ const handlePushAllOutsourcing = async (row: any) => {
 };
 
 const digitUppercase = (n: number) => {
-  // 👉 极度安全保护：防止空值导致报错
   if (n === null || n === undefined || isNaN(n)) return '零元整';
   
   const fraction = ['角', '分'];
@@ -1391,7 +1566,6 @@ const digitUppercase = (n: number) => {
   return head + s.replace(/(零.)*零元/, '元').replace(/(零.)+/g, '零').replace(/^整$/, '零元整');
 };
 
-// 👉 核心：加入超强追踪与空值保护的委外单打印逻辑
 const handlePrintOutsourcing = async (row: any) => {
   try {
     console.log("=== 正在请求工单数据 ===", row.id);
@@ -1413,7 +1587,6 @@ const handlePrintOutsourcing = async (row: any) => {
 
     printData.value.workOrderNo = woDetail.workOrderNo || '未知单号';
     
-    // 👉 原生、绝对安全的日期解析
     let safeDate = '未定';
     if (woDetail.createTime) {
       safeDate = String(woDetail.createTime).split(' ')[0].replace(/-/g, '/');
@@ -1443,7 +1616,6 @@ const handlePrintOutsourcing = async (row: any) => {
     console.log("构建的打印分组数据:", Array.from(groupsMap.values()));
     printData.value.groups = Array.from(groupsMap.values());
     
-    // 打开弹窗
     printDialog.visible = true;
     console.log("=== 弹窗已成功触发 ===");
     
@@ -1496,7 +1668,7 @@ const doPrint = () => {
           .print-header { text-align: center; margin-bottom: 10px; position: relative; }
           .print-header h1 { margin: 0; font-size: 24px; padding-bottom: 10px;}
           .print-table { width: 100%; border-collapse: collapse; font-size: 12px; }
-          .print-table td, .print-table th { border: 1px solid #000; padding: 6px 4px; word-break: break-all; }
+          .print-table td, .print-table th { border: 1px solid #00; padding: 6px 4px; word-break: break-all; }
           .grey-bg { background-color: #e8e8e8 !important; -webkit-print-color-adjust: exact; color-adjust: exact; }
           .center-align { text-align: center; }
           .left-align { text-align: left !important; }
@@ -1519,5 +1691,13 @@ onMounted(() => {
   getList(); 
   getCustomerList(); 
   loadInventoryData(); 
+
+  getDicts('erp_process_name').then((res: any) => {
+    rawProcessDictOptions.value = res.data || [];
+  });
+
+  if (route.query.action === 'add') {
+    handleAdd();
+  }
 });
 </script>

@@ -53,20 +53,28 @@ public class BizCustomerVo implements Serializable {
     private String contactPhone;
 
     /**
-     * 核心优化1：利用若依自带的字典转换器，导出时自动把 1/2 翻译成中文
+     * 核心优化1：增加 separator = "," 支持多选身份（如“供应商,加工商”）的翻译
      */
     @ExcelProperty(value = "类型", converter = ExcelDictConvert.class)
-    @ExcelDictFormat(dictType = "erp_customer_type")
+    @ExcelDictFormat(dictType = "erp_customer_type", separator = ",")
     @ColumnWidth(15)
     private String customerType;
 
     /**
-     * 核心优化2：多选字典的翻译，导出直接变成“模切,光胶”
+     * 核心优化2：原来这里只有供应商分类，保留它
      */
     @ExcelProperty(value = "供应分类", converter = ExcelDictConvert.class)
     @ExcelDictFormat(dictType = "erp_supplier_category", separator = ",")
     @ColumnWidth(20)
     private String supplierCategory;
+
+    /**
+     * 核心优化3：新增加工商分类字段的导出映射
+     */
+    @ExcelProperty(value = "加工商分类", converter = ExcelDictConvert.class)
+    @ExcelDictFormat(dictType = "erp_processor_category", separator = ",")
+    @ColumnWidth(20)
+    private String processorCategory;
 
     private String companyProvince;
     private String companyCity;

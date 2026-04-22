@@ -60,9 +60,14 @@ public class BizCustomerBo extends BaseEntity {
     private String contactPhone;
 
     /**
-     * 类型：1-普通客户, 2-供应商
+     * 类型：(1-普通客户, 2-供应商, 3-加工商)
      */
     private String customerType;
+
+    /**
+     * 统一的 加工/供应 分类查询字段
+     */
+    private String bizCategory;
 
     /**
      * 公司所在省
@@ -133,6 +138,11 @@ public class BizCustomerBo extends BaseEntity {
      * 供应商分类(1=面纸,2=模切... 逗号分隔)
      */
     private String supplierCategory;
+
+    /**
+     * 加工商分类
+     */
+    private String processorCategory;
 
     /**
      * 备注

@@ -134,6 +134,11 @@ public class BizCustomer extends BaseEntity {
     private String supplierCategory;
 
     /**
+     * 加工商分类
+     */
+    private String processorCategory;
+
+    /**
      * 删除标志（0代表存在 2代表删除）
      */
     @TableLogic

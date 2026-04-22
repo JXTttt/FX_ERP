@@ -34,6 +34,22 @@
                 @keyup.enter="handleQuery"
               />
             </el-form-item>
+            <el-form-item label="客户角色" prop="customerType">
+              <el-select v-model="queryParams.customerType" placeholder="全部" clearable style="width: 120px" @change="handleQuery">
+                <el-option v-for="dict in erp_customer_type" :key="dict.value" :label="dict.label" :value="dict.value" />
+              </el-select>
+            </el-form-item>
+            
+            <el-form-item label="加工/供应" prop="bizCategory">
+              <el-select v-model="queryParams.bizCategory" placeholder="请选择分类" clearable filterable style="width: 150px" @change="handleQuery">
+                <el-option-group label="► 供应商分类">
+                  <el-option v-for="dict in erp_supplier_category" :key="'sup_' + dict.value" :label="dict.label" :value="dict.value" />
+                </el-option-group>
+                <el-option-group label="► 加工商分类">
+                  <el-option v-for="dict in erp_processor_category" :key="'proc_' + dict.value" :label="dict.label" :value="dict.value" />
+                </el-option-group>
+              </el-select>
+            </el-form-item>
             <el-form-item>
               <el-button type="primary" icon="Search" @click="handleQuery">搜索</el-button>
               <el-button icon="Refresh" @click="resetQuery">重置</el-button>
@@ -70,6 +86,8 @@
           </template>
         </el-table-column>
 
+        <el-table-column label="简称" align="center" prop="shortName" min-width="100" show-overflow-tooltip />
+
         <el-table-column label="联系人" align="center" prop="contactPerson" width="100" />
         <el-table-column label="手机号" align="center" prop="contactPhone" width="130" />
 
@@ -79,9 +97,14 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="供应分类" align="center" prop="supplierCategory" min-width="150">
+        <el-table-column label="加工/供应类型" align="left" min-width="180">
           <template #default="scope">
-            <dict-tag :options="erp_supplier_category" :value="scope.row.supplierCategory" />
+            <div v-if="scope.row.customerType && scope.row.customerType.includes('2')" class="mb-[5px]">
+              <dict-tag :options="erp_supplier_category" :value="scope.row.supplierCategory" />
+            </div>
+            <div v-if="scope.row.customerType && scope.row.customerType.includes('3')">
+              <dict-tag :options="erp_processor_category" :value="scope.row.processorCategory" />
+            </div>
           </template>
         </el-table-column>
 
@@ -188,15 +211,16 @@
               <el-input v-model="form.shortName" placeholder="请输入客户简称" />
             </el-form-item>
           </el-col>
+          
           <el-col :span="12">
             <el-form-item label="类型" prop="customerType">
-              <el-select v-model="form.customerType" placeholder="请选择类型" style="width: 100%">
+              <el-select v-model="form.customerType" multiple placeholder="请选择类型" style="width: 100%">
                 <el-option v-for="dict in erp_customer_type" :key="dict.value" :label="dict.label" :value="dict.value" />
               </el-select>
             </el-form-item>
           </el-col>
 
-          <el-col :span="12" v-if="form.customerType === '2'">
+          <el-col :span="12" v-if="form.customerType && form.customerType.includes('2')">
             <el-form-item label="供应分类" prop="supplierCategory">
               <el-select 
                 v-model="form.supplierCategory" 
@@ -206,6 +230,20 @@
                 clearable
               >
                 <el-option v-for="dict in erp_supplier_category" :key="dict.value" :label="dict.label" :value="dict.value" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+
+          <el-col :span="12" v-if="form.customerType && form.customerType.includes('3')">
+            <el-form-item label="加工分类" prop="processorCategory">
+              <el-select 
+                v-model="form.processorCategory" 
+                multiple 
+                placeholder="请选择加工商分类" 
+                style="width: 100%"
+                clearable
+              >
+                <el-option v-for="dict in erp_processor_category" :key="dict.value" :label="dict.label" :value="dict.value" />
               </el-select>
             </el-form-item>
           </el-col>
@@ -306,17 +344,18 @@
 </template>
 
 <script setup name="Customer" lang="ts">
-// 👉 新增：引入 request 使得能直接调用 /erp/customer/settle 接口
 import request from '@/utils/request';
 import { listCustomer, getCustomer, delCustomer, addCustomer, updateCustomer } from "@/api/erp/customer";
 import { CustomerVO } from "@/api/erp/customer/types";
 import { pcaTextArr } from "element-china-area-data";
 import { ComponentInternalInstance, getCurrentInstance, onMounted, reactive, ref, toRefs } from 'vue';
 import { listUser } from "@/api/system/user";
+import { useRoute } from 'vue-router';
 
 const { proxy } = getCurrentInstance() as ComponentInternalInstance;
-const { erp_customer_type, erp_supplier_category } = toRefs<any>(proxy?.useDict("erp_customer_type", "erp_supplier_category"));
+const { erp_customer_type, erp_supplier_category, erp_processor_category } = toRefs<any>(proxy?.useDict("erp_customer_type", "erp_supplier_category", "erp_processor_category"));
 
+const route = useRoute();
 const customerList = ref<CustomerVO[]>([]);
 const buttonLoading = ref(false);
 const loading = ref(true);
@@ -339,7 +378,6 @@ const dialog = reactive({
   title: "",
 });
 
-// 👉 新增：结清账款相关的状态和表单数据
 const settleDialog = reactive({ visible: false });
 const settleLoading = ref(false);
 const currentSettleCustomer = ref<any>({});
@@ -351,8 +389,9 @@ const initFormData: any = {
   shortName: undefined,
   contactPerson: undefined,
   contactPhone: undefined,
-  customerType: undefined,
+  customerType: [], 
   supplierCategory: [], 
+  processorCategory: [], 
   companyProvince: undefined,
   companyCity: undefined,
   companyDistrict: undefined,
@@ -376,10 +415,12 @@ const data = reactive<any>({
     contactPerson: undefined,
     contactPhone: undefined,
     customerType: undefined,
+    bizCategory: undefined,
   },
   rules: {
     companyName: [{ required: true, message: "客户公司全称不能为空", trigger: "blur" }],
     customerCode: [{ required: true, message: "客户编码不能为空", trigger: "blur" }],
+    customerType: [{ required: true, message: "客户类型不能为空", trigger: "change" }]
   },
 });
 
@@ -454,6 +495,13 @@ const handleAdd = () => {
   dialog.title = "添加客户及供应商";
 };
 
+const formatStringToArray = (val: any) => {
+  if (val && typeof val === 'string') {
+    return val.split(',');
+  }
+  return [];
+};
+
 const handleUpdate = async (row?: CustomerVO) => {
   reset();
   isView.value = false;
@@ -461,11 +509,9 @@ const handleUpdate = async (row?: CustomerVO) => {
   const res = await getCustomer(_id);
   Object.assign(form.value, res.data);
   
-  if (form.value.supplierCategory && typeof form.value.supplierCategory === 'string') {
-    form.value.supplierCategory = form.value.supplierCategory.split(',');
-  } else {
-    form.value.supplierCategory = [];
-  }
+  form.value.customerType = formatStringToArray(form.value.customerType);
+  form.value.supplierCategory = formatStringToArray(form.value.supplierCategory);
+  form.value.processorCategory = formatStringToArray(form.value.processorCategory);
   
   if (form.value.companyProvince && form.value.companyCity && form.value.companyDistrict) {
     companyRegion.value = [form.value.companyProvince, form.value.companyCity, form.value.companyDistrict];
@@ -490,11 +536,9 @@ const handleView = async (row?: CustomerVO) => {
   const res = await getCustomer(_id);
   Object.assign(form.value, res.data);
 
-  if (form.value.supplierCategory && typeof form.value.supplierCategory === 'string') {
-    form.value.supplierCategory = form.value.supplierCategory.split(',');
-  } else {
-    form.value.supplierCategory = [];
-  }
+  form.value.customerType = formatStringToArray(form.value.customerType);
+  form.value.supplierCategory = formatStringToArray(form.value.supplierCategory);
+  form.value.processorCategory = formatStringToArray(form.value.processorCategory);
 
   if (form.value.companyProvince && form.value.companyCity && form.value.companyDistrict) {
     companyRegion.value = [form.value.companyProvince, form.value.companyCity, form.value.companyDistrict];
@@ -507,18 +551,16 @@ const handleView = async (row?: CustomerVO) => {
   dialog.title = "客户详情";
 };
 
-// 👉 新增：点击手工结清按钮触发
 const handleSettle = (row: any) => {
   currentSettleCustomer.value = row;
   settleForm.value = {
     id: row.id,
-    settleAmount: row.totalOweAmount, // 默认带出全部欠款
+    settleAmount: row.totalOweAmount,
     remark: ''
   };
   settleDialog.visible = true;
 };
 
-// 👉 新增：提交结清表单
 const submitSettle = async () => {
   if (!settleForm.value.settleAmount) {
     proxy?.$modal.msgError("请输入结清金额");
@@ -533,7 +575,7 @@ const submitSettle = async () => {
     });
     proxy?.$modal.msgSuccess("账款核销成功！已自动生成财务流水。");
     settleDialog.visible = false;
-    getList(); // 刷新表格数据，此时欠款将扣减
+    getList();
   } finally {
     settleLoading.value = false;
   }
@@ -544,8 +586,15 @@ const submitForm = () => {
     if (valid) {
       buttonLoading.value = true;
       const submitData = { ...form.value };
+      
+      if (Array.isArray(submitData.customerType)) {
+          submitData.customerType = submitData.customerType.join(',');
+      }
       if (Array.isArray(submitData.supplierCategory)) {
           submitData.supplierCategory = submitData.supplierCategory.join(',');
+      }
+      if (Array.isArray(submitData.processorCategory)) {
+          submitData.processorCategory = submitData.processorCategory.join(',');
       }
 
       if (submitData.id) {
@@ -580,10 +629,8 @@ const handleExport = () => {
   );
 };
 
-// 👉 3. 获取用户列表的方法
 const getUserList = async () => {
   try {
-    // 传个大点的 pageSize 保证拉取全量人员，且只查状态正常(status: '0')的员工
     const res = await listUser({ 
       pageNum: 1, 
       pageSize: 1000, 
@@ -598,5 +645,9 @@ const getUserList = async () => {
 onMounted(() => {
   getUserList();
   getList();
+
+  if (route.query.action === 'add') {
+    handleAdd();
+  }
 });
 </script>

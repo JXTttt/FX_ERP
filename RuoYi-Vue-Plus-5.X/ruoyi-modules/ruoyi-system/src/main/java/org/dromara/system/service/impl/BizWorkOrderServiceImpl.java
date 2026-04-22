@@ -123,13 +123,21 @@ public class BizWorkOrderServiceImpl implements IBizWorkOrderService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public Boolean insertByBo(BizWorkOrderBo bo) {
-        if (StringUtils.isBlank(bo.getWorkOrderNo())) {
+        // 1. 修复主工单号的并发/逻辑删除重复问题 (改用 Redis 原子自增)
+        if (org.dromara.common.core.utils.StringUtils.isBlank(bo.getWorkOrderNo())) {
             String dateStr = java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyMMdd"));
-            Long count = baseMapper.selectCount(new LambdaQueryWrapper<BizWorkOrder>().likeRight(BizWorkOrder::getWorkOrderNo, dateStr));
-            bo.setWorkOrderNo(dateStr + String.format("%04d", count == null ? 0 : count + 1));
+            String redisKey = "erp:work_order_seq:" + dateStr;
+
+            // 调用 Redis 生成单号
+            Long currentSeq = org.dromara.common.redis.utils.RedisUtils.incrAtomicValue(redisKey);
+            if (currentSeq == 1L) {
+                // 主单号按天生成，Redis Key 保留 2 天即可自动销毁
+                org.dromara.common.redis.utils.RedisUtils.expire(redisKey, java.time.Duration.ofDays(2));
+            }
+            bo.setWorkOrderNo(dateStr + String.format("%04d", currentSeq));
         }
 
-        BizWorkOrder add = MapstructUtils.convert(bo, BizWorkOrder.class);
+        BizWorkOrder add = org.dromara.common.core.utils.MapstructUtils.convert(bo, BizWorkOrder.class);
         validEntityBeforeSave(add);
 
         // 核心：新建工单状态默认为 "1-待审批"
@@ -176,27 +184,55 @@ public class BizWorkOrderServiceImpl implements IBizWorkOrderService {
     private void insertChildren(BizWorkOrderBo bo) {
         Long woId = bo.getId();
 
+        // ======================= 1. 处理产品明细（通过 Redis 生成唯一的刀版流水号） =======================
         if (bo.getProductList() != null && !bo.getProductList().isEmpty()) {
-            List<BizWoProduct> list = MapstructUtils.convert(bo.getProductList(), BizWoProduct.class);
-            list = list.stream().filter(i -> StringUtils.isNotBlank(i.getProductName())).collect(java.util.stream.Collectors.toList());
+
+            // 组装 Redis 的 Key，格式例如：erp:knife_plate_seq:FX-2604
+            String prefix = "FX-" + cn.hutool.core.date.DateUtil.format(new java.util.Date(), "yyMM");
+            String redisKey = "erp:knife_plate_seq:" + prefix;
+
+            for (org.dromara.system.domain.bo.BizWoProductBo productBo : bo.getProductList()) {
+                // 判断：如果是全新新增的产品（没有主键 ID），或者前端没传刀版号
+                if (productBo.getId() == null || org.dromara.common.core.utils.StringUtils.isBlank(productBo.getKnifePlateNo())) {
+
+                    // 🚀 核心：调用 RuoYi-Vue-Plus 内置的 Redis 工具类进行绝对安全的原子自增
+                    // 只要调用一次，数字永远向前加 1，不受逻辑删除影响！
+                    Long currentSeq = org.dromara.common.redis.utils.RedisUtils.incrAtomicValue(redisKey);
+
+                    // 如果是本月第一单，给这个 Redis Key 设置一个35天的过期时间，防止内存中堆积太多垃圾 Key
+                    if (currentSeq == 1L) {
+                        org.dromara.common.redis.utils.RedisUtils.expire(redisKey, java.time.Duration.ofDays(35));
+                    }
+
+                    // 拼装完整的刀版号：FX-2604 + 0001
+                    productBo.setKnifePlateNo(prefix + String.format("%04d", currentSeq));
+                }
+            }
+
+            // 执行常规的实体转换与批量插入0000000
+            List<BizWoProduct> list = org.dromara.common.core.utils.MapstructUtils.convert(bo.getProductList(), BizWoProduct.class);
+            list = list.stream().filter(i -> org.dromara.common.core.utils.StringUtils.isNotBlank(i.getProductName())).collect(java.util.stream.Collectors.toList());
             if(!list.isEmpty()) {
-                list.forEach(i -> { i.setWorkOrderId(woId); i.setId(null); });
+                list.forEach(i -> {
+                    i.setWorkOrderId(woId);
+                    i.setId(null);
+                });
                 productMapper.insertBatch(list);
             }
         }
 
-        // 保存材料清单：只要部件名或物料名填写了任意一个就不抛弃
+        // ======================= 2. 处理其他子表（保持你原有的逻辑不变） =======================
         if (bo.getMaterialList() != null && !bo.getMaterialList().isEmpty()) {
-            List<BizWoMaterial> list = MapstructUtils.convert(bo.getMaterialList(), BizWoMaterial.class);
+            List<BizWoMaterial> list = org.dromara.common.core.utils.MapstructUtils.convert(bo.getMaterialList(), BizWoMaterial.class);
             list = list.stream()
-                .filter(i -> StringUtils.isNotBlank(i.getPartName()) || StringUtils.isNotBlank(i.getPaperName()))
+                .filter(i -> org.dromara.common.core.utils.StringUtils.isNotBlank(i.getPartName()) || org.dromara.common.core.utils.StringUtils.isNotBlank(i.getPaperName()))
                 .collect(java.util.stream.Collectors.toList());
 
             if(!list.isEmpty()) {
                 list.forEach(i -> {
                     i.setWorkOrderId(woId);
                     i.setId(null);
-                    if (StringUtils.isBlank(i.getPartName())) {
+                    if (org.dromara.common.core.utils.StringUtils.isBlank(i.getPartName())) {
                         i.setPartName("默认部件");
                     }
                 });
@@ -276,7 +312,7 @@ public class BizWorkOrderServiceImpl implements IBizWorkOrderService {
         if (flag && "2".equals(bo.getAuditStatus())) {
             // 1. 自动生成排产大表格子
             generateScheduleTasks(bo.getId());
-            // 2. 自动生成采购需求单 (👉 核心修改：只从“其它订料”生成)
+            // 2. 自动生成采购需求单
             generatePurchaseOrders(bo.getId());
 
             // 3. 自动扣减本厂原材料库存 (来源: 本厂)
