@@ -21,6 +21,7 @@ import org.dromara.common.core.validate.EditGroup;
 import org.dromara.common.log.enums.BusinessType;
 import org.dromara.common.excel.utils.ExcelUtil;
 import org.dromara.system.domain.vo.BizWorkOrderVo;
+import org.dromara.system.domain.vo.BizPrintWorkOrderVo;
 import org.dromara.system.domain.bo.BizWorkOrderBo;
 import org.dromara.system.service.IBizWorkOrderService;
 import org.dromara.common.mybatis.core.page.TableDataInfo;
@@ -117,6 +118,18 @@ public class BizWorkOrderController extends BaseController {
     @PutMapping("/audit")
     public R<Void> audit(@RequestBody BizWorkOrderBo bo) {
         return toAjax(bizWorkOrderService.auditWorkOrder(bo));
+    }
+
+    /**
+     * 获取打印工单数据
+     *
+     * @param id 工单ID
+     */
+    @SaCheckPermission("erp:workOrder:query")
+    @GetMapping("/print/{id}")
+    public R<BizPrintWorkOrderVo> getPrintInfo(@NotNull(message = "主键不能为空")
+                                                @PathVariable Long id) {
+        return R.ok(bizWorkOrderService.queryPrintWorkOrder(id));
     }
 
     /**

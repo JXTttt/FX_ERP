@@ -22,7 +22,7 @@ public class BizWoMaterial extends BaseEntity {
     private static final long serialVersionUID = 1L;
 
     /**
-     * 
+     *
      */
     @TableId(value = "id")
     private Long id;
@@ -66,6 +66,13 @@ public class BizWoMaterial extends BaseEntity {
      * 切纸尺寸
      */
     private String cutSize;
+
+    private String productName;
+
+    /**
+     * 版次
+     */
+    private String edition;
 
     /**
      * 备注

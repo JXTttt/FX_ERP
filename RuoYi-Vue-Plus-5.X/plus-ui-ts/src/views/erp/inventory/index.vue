@@ -269,7 +269,7 @@ const data = reactive<PageData<InventoryForm, InventoryQuery>>({
   form: {...initFormData},
   queryParams: {
     pageNum: 1,
-    pageSize: 10,
+    pageSize: 50,
     uniqueCode: undefined,
     itemType: undefined,
     itemName: undefined,

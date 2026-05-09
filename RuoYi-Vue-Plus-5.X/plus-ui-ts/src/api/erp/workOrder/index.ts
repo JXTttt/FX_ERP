@@ -70,3 +70,11 @@ export const auditWorkOrder = (data: any) => {
     data: data
   });
 };
+
+// 获取打印工单数据
+export const getPrintWorkOrder = (id: string | number): AxiosPromise<any> => {
+  return request({
+    url: '/erp/workOrder/print/' + id,
+    method: 'get'
+  });
+};

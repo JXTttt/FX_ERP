@@ -22,7 +22,7 @@ public class BizWoProcess extends BaseEntity {
     private static final long serialVersionUID = 1L;
 
     /**
-     * 
+     *
      */
     @TableId(value = "id")
     private Long id;
@@ -38,9 +38,16 @@ public class BizWoProcess extends BaseEntity {
     private String processName;
 
     /**
+     * 加工细则(如裱坑类型:单E/单B/EE/BB)
+     */
+    private String processDetail;
+
+    /**
      * 工艺内容
      */
     private String processContent;
+
+    private String productName;
 
     /**
      * 备注

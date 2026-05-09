@@ -1,6 +1,7 @@
 package org.dromara.system.service;
 
 import org.dromara.system.domain.vo.BizWorkOrderVo;
+import org.dromara.system.domain.vo.BizPrintWorkOrderVo;
 import org.dromara.system.domain.bo.BizWorkOrderBo;
 import org.dromara.common.mybatis.core.page.TableDataInfo;
 import org.dromara.common.mybatis.core.page.PageQuery;
@@ -70,4 +71,12 @@ public interface IBizWorkOrderService {
      * 审核工单
      */
     Boolean auditWorkOrder(BizWorkOrderBo bo);
+
+    /**
+     * 查询打印工单数据
+     *
+     * @param id 工单ID
+     * @return 打印工单视图
+     */
+    BizPrintWorkOrderVo queryPrintWorkOrder(Long id);
 }

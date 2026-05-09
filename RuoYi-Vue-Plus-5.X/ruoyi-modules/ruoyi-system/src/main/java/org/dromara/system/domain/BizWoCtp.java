@@ -1,5 +1,6 @@
 package org.dromara.system.domain;
 
+import cn.idev.excel.annotation.ExcelProperty;
 import org.dromara.common.mybatis.core.domain.BaseEntity;
 import com.baomidou.mybatisplus.annotation.*;
 import lombok.Data;
@@ -22,7 +23,7 @@ public class BizWoCtp extends BaseEntity {
     private static final long serialVersionUID = 1L;
 
     /**
-     * 
+     *
      */
     @TableId(value = "id")
     private Long id;
@@ -61,6 +62,8 @@ public class BizWoCtp extends BaseEntity {
      * CTP版张数
      */
     private Long plateCount;
+
+    private String productName;
 
     /**
      * 备注

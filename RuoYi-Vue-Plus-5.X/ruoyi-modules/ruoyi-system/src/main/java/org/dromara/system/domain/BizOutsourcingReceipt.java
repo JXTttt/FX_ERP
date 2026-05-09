@@ -51,6 +51,11 @@ public class BizOutsourcingReceipt extends BaseEntity {
     private String processProject;
 
     /**
+     * 加工细则
+     */
+    private String processDetail;
+
+    /**
      * 加工商ID
      */
     private Long supplierId;

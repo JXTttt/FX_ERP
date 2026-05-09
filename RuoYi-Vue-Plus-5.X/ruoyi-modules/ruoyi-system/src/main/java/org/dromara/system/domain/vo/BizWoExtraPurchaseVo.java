@@ -70,6 +70,9 @@ public class BizWoExtraPurchaseVo implements Serializable {
     @ExcelProperty(value = "总价")
     private Long totalPrice;
 
+    @ExcelProperty(value = "产品名字")
+    private String productName;
+
     /**
      * 备注
      */

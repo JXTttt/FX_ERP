@@ -53,6 +53,11 @@ public class BizOutsourcingReceiptBo extends BaseEntity {
     private String processProject;
 
     /**
+     * 加工细则
+     */
+    private String processDetail;
+
+    /**
      * 加工商ID
      */
     @NotNull(message = "加工商ID不能为空", groups = { AddGroup.class, EditGroup.class })

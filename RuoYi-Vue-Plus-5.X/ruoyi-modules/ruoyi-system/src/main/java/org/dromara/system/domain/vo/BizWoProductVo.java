@@ -108,4 +108,10 @@ public class BizWoProductVo implements Serializable {
     @JsonFormat(pattern = "yyyy-MM-dd")
     private Date deliveryDate;
 
+    @ExcelProperty(value = "包装需求")
+    private String packRequirement;
+
+    @ExcelProperty(value = "物流要求")
+    private String logisticsReq;
+
 }

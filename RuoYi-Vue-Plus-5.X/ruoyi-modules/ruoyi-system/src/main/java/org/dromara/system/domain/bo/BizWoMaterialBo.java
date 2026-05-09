@@ -69,6 +69,13 @@ public class BizWoMaterialBo extends BaseEntity {
      */
     private String cutSize;
 
+    private String productName;
+
+    /**
+     * 版次
+     */
+    private String edition;
+
     /**
      * 备注
      */

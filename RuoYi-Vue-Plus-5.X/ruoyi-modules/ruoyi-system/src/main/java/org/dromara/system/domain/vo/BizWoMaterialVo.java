@@ -29,7 +29,7 @@ public class BizWoMaterialVo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     /**
-     * 
+     *
      */
     @ExcelProperty(value = "")
     private Long id;
@@ -81,6 +81,15 @@ public class BizWoMaterialVo implements Serializable {
      */
     @ExcelProperty(value = "切纸尺寸")
     private String cutSize;
+
+    @ExcelProperty(value = "产品名字")
+    private String productName;
+
+    /**
+     * 版次
+     */
+    @ExcelProperty(value = "版次")
+    private String edition;
 
     /**
      * 备注

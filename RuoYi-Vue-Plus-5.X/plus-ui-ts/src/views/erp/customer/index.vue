@@ -410,7 +410,7 @@ const data = reactive<any>({
   form: { ...initFormData },
   queryParams: {
     pageNum: 1,
-    pageSize: 10,
+    pageSize: 50,
     companyName: undefined,
     contactPerson: undefined,
     contactPhone: undefined,

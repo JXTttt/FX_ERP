@@ -61,6 +61,9 @@ public class BizOutsourcingReceiptVo implements Serializable {
     @ExcelProperty(value = "加工工序")
     private String processProject;
 
+    @ExcelProperty(value = "加工细则")
+    private String processDetail;
+
     /**
      * 加工商ID
      */

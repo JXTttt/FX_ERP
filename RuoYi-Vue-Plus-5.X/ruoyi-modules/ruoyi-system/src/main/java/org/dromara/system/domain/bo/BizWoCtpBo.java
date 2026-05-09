@@ -62,6 +62,8 @@ public class BizWoCtpBo extends BaseEntity {
      */
     private Long plateCount;
 
+    private String productName;
+
     /**
      * 备注
      */

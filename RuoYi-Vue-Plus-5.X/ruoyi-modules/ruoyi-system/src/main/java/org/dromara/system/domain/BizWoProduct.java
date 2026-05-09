@@ -96,4 +96,14 @@ public class BizWoProduct extends BaseEntity {
     @JsonFormat(pattern = "yyyy-MM-dd")
     private Date deliveryDate;
 
+    /**
+     * 包装需求
+     */
+    private String packRequirement;
+
+    /**
+     * 物流要求
+     */
+    private String logisticsReq;
+
 }

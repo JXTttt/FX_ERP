@@ -29,7 +29,7 @@ public class BizWoProcessVo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     /**
-     * 
+     *
      */
     @ExcelProperty(value = "")
     private Long id;
@@ -46,12 +46,18 @@ public class BizWoProcessVo implements Serializable {
     @ExcelProperty(value = "工序名称(如:表面处理,裱坑,粘盒)")
     private String processName;
 
+    @ExcelProperty(value = "加工细则")
+    private String processDetail;
+
     /**
      * 工艺内容
      */
     @ExcelProperty(value = "工艺内容", converter = ExcelDictConvert.class)
     @ExcelDictFormat(dictType = "erp_process_name")
     private String processContent;
+
+    @ExcelProperty(value = "产品名字")
+    private String productName;
 
     /**
      * 备注

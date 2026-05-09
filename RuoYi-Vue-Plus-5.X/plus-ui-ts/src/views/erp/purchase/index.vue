@@ -259,7 +259,7 @@ const data = reactive({
   },
   queryParams: {
     pageNum: 1,
-    pageSize: 10,
+    pageSize: 50,
     purchaseNo: undefined,
     relatedWoNo: undefined,
     supplierId: undefined,

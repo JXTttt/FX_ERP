@@ -10,6 +10,8 @@ import org.dromara.common.core.utils.MapstructUtils;
 import org.dromara.common.core.utils.StringUtils;
 import org.dromara.common.mybatis.core.page.PageQuery;
 import org.dromara.common.mybatis.core.page.TableDataInfo;
+import org.dromara.common.satoken.utils.LoginHelper;
+import org.dromara.system.domain.vo.BizWoOutsourcingVo;
 import org.dromara.system.mapper.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,6 +24,8 @@ import org.dromara.system.domain.BizScheduleNode;
 import org.dromara.system.domain.BizWorkOrder;
 import org.dromara.system.domain.bo.BizWorkOrderBo;
 import org.dromara.system.domain.vo.BizWorkOrderVo;
+import org.dromara.system.domain.vo.BizPrintWorkOrderVo;
+import org.dromara.system.domain.vo.BizWoProductVo;
 import org.dromara.system.service.IBizWorkOrderService;
 
 // 引入子表实体
@@ -33,22 +37,31 @@ import org.dromara.system.domain.BizWoPostProcess;
 import org.dromara.system.domain.BizWoExtraPurchase;
 import org.dromara.system.domain.BizWoProcess;
 import org.dromara.system.domain.BizWoOutsourcing;
+
 // 引入采购表
 import org.dromara.system.domain.BizPurchase;
 
+// 【新增】引入订单表
+import org.dromara.system.domain.BizSalesOrder;
+import org.dromara.system.domain.BizSalesOrderDetail;
+
 import java.util.Collection;
 import java.util.List;
+import java.util.ArrayList;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 import java.math.BigDecimal;
 import java.util.Date;
 import cn.hutool.core.date.DateUtil;
 import cn.hutool.core.util.RandomUtil;
+import org.dromara.common.core.service.DictService;
+import org.dromara.common.core.domain.dto.DictDataDTO;
 
 /**
  * 工单管理Service业务层处理
  *
- * @author JXTttt
- * @date 2026-02-13
+ * @author fx_erp
  */
 @Slf4j
 @RequiredArgsConstructor
@@ -76,6 +89,13 @@ public class BizWorkOrderServiceImpl implements IBizWorkOrderService {
 
     // 注入采购单Mapper
     private final BizPurchaseMapper purchaseMapper;
+
+    // 【新增】注入销售订单相关 Mapper，用于数据桥接
+    private final BizSalesOrderMapper salesOrderMapper;
+    private final BizSalesOrderDetailMapper salesOrderDetailMapper;
+
+    // 字典服务，用于打印工单分类
+    private final DictService dictService;
 
     @Override
     public BizWorkOrderVo queryById(Long id){
@@ -120,31 +140,65 @@ public class BizWorkOrderServiceImpl implements IBizWorkOrderService {
         return lqw;
     }
 
+    // ====================================================================
+    // 【新增核心业务】：从订单明细一键提取数据初始化工程单 (职员B开单用)
+    // 注意：你需要在 IBizWorkOrderService 接口中声明此方法
+    // ====================================================================
+    public BizWorkOrderVo initFromSalesOrder(Long salesOrderDetailId) {
+        BizSalesOrderDetail detail = salesOrderDetailMapper.selectById(salesOrderDetailId);
+        if (detail == null) throw new ServiceException("销售订单明细不存在");
+
+        BizSalesOrder order = salesOrderMapper.selectById(detail.getSalesOrderId());
+        if (order == null) throw new ServiceException("销售订单主表不存在");
+
+        BizWorkOrderVo wo = new BizWorkOrderVo();
+        // 绑定上下游关系
+        wo.setSalesOrderId(order.getId());
+        wo.setSalesOrderDetailId(detail.getId());
+
+        // 自动填充信息
+        wo.setCustomerId(order.getCustomerId());
+        wo.setCustomerName(order.getCustomerName());
+        wo.setProductName(detail.getProductName());
+        wo.setDeliveryDate(order.getDeliveryDate());
+        wo.setPackRequirement(detail.getPackReq());
+        wo.setRemark(detail.getCraftReq()); // 销售写的工艺需求暂时放入备注供工程参考
+
+        // 初始化 productList，将销售订单明细的包装需求和物流要求带入
+        BizWoProductVo product = new BizWoProductVo();
+        product.setProductName(detail.getProductName());
+        product.setSpec(detail.getSpec());
+        product.setCustomerMaterialNo(detail.getCustomerMaterialNo());
+        if (detail.getQuantity() != null) {
+            product.setOrderQuantity(detail.getQuantity().longValue());
+            product.setProduceQuantity(detail.getQuantity().longValue());
+        }
+        product.setPackRequirement(detail.getPackReq());
+        product.setLogisticsReq(detail.getLogisticsReq());
+        wo.setProductList(java.util.Collections.singletonList(product));
+
+        return wo;
+    }
+
     @Override
     @Transactional(rollbackFor = Exception.class)
     public Boolean insertByBo(BizWorkOrderBo bo) {
-        // 1. 修复主工单号的并发/逻辑删除重复问题 (改用 Redis 原子自增)
         if (org.dromara.common.core.utils.StringUtils.isBlank(bo.getWorkOrderNo())) {
             String dateStr = java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyMMdd"));
             String redisKey = "erp:work_order_seq:" + dateStr;
-
-            // 调用 Redis 生成单号
             Long currentSeq = org.dromara.common.redis.utils.RedisUtils.incrAtomicValue(redisKey);
             if (currentSeq == 1L) {
-                // 主单号按天生成，Redis Key 保留 2 天即可自动销毁
                 org.dromara.common.redis.utils.RedisUtils.expire(redisKey, java.time.Duration.ofDays(2));
             }
             bo.setWorkOrderNo(dateStr + String.format("%04d", currentSeq));
         }
 
+        bo.setPreparedBy(LoginHelper.getUsername());
         BizWorkOrder add = org.dromara.common.core.utils.MapstructUtils.convert(bo, BizWorkOrder.class);
         validEntityBeforeSave(add);
-
-        // 核心：新建工单状态默认为 "1-待审批"
         add.setAuditStatus("1");
 
         boolean flag = baseMapper.insert(add) > 0;
-
         if (flag) {
             bo.setId(add.getId());
             insertChildren(bo);
@@ -172,7 +226,8 @@ public class BizWorkOrderServiceImpl implements IBizWorkOrderService {
         if(isValid){
             //TODO 做一些业务上的校验
         }
-        boolean flag = baseMapper.deleteBatchIds(ids) > 0;
+        // 【修复警告】：替换为新版 API deleteByIds
+        boolean flag = baseMapper.deleteByIds(ids) > 0;
         if (flag) {
             for (Long id : ids) {
                 deleteChildren(id);
@@ -184,32 +239,20 @@ public class BizWorkOrderServiceImpl implements IBizWorkOrderService {
     private void insertChildren(BizWorkOrderBo bo) {
         Long woId = bo.getId();
 
-        // ======================= 1. 处理产品明细（通过 Redis 生成唯一的刀版流水号） =======================
         if (bo.getProductList() != null && !bo.getProductList().isEmpty()) {
-
-            // 组装 Redis 的 Key，格式例如：erp:knife_plate_seq:FX-2604
             String prefix = "FX-" + cn.hutool.core.date.DateUtil.format(new java.util.Date(), "yyMM");
             String redisKey = "erp:knife_plate_seq:" + prefix;
 
             for (org.dromara.system.domain.bo.BizWoProductBo productBo : bo.getProductList()) {
-                // 判断：如果是全新新增的产品（没有主键 ID），或者前端没传刀版号
                 if (productBo.getId() == null || org.dromara.common.core.utils.StringUtils.isBlank(productBo.getKnifePlateNo())) {
-
-                    // 🚀 核心：调用 RuoYi-Vue-Plus 内置的 Redis 工具类进行绝对安全的原子自增
-                    // 只要调用一次，数字永远向前加 1，不受逻辑删除影响！
                     Long currentSeq = org.dromara.common.redis.utils.RedisUtils.incrAtomicValue(redisKey);
-
-                    // 如果是本月第一单，给这个 Redis Key 设置一个35天的过期时间，防止内存中堆积太多垃圾 Key
                     if (currentSeq == 1L) {
                         org.dromara.common.redis.utils.RedisUtils.expire(redisKey, java.time.Duration.ofDays(35));
                     }
-
-                    // 拼装完整的刀版号：FX-2604 + 0001
                     productBo.setKnifePlateNo(prefix + String.format("%04d", currentSeq));
                 }
             }
 
-            // 执行常规的实体转换与批量插入0000000
             List<BizWoProduct> list = org.dromara.common.core.utils.MapstructUtils.convert(bo.getProductList(), BizWoProduct.class);
             list = list.stream().filter(i -> org.dromara.common.core.utils.StringUtils.isNotBlank(i.getProductName())).collect(java.util.stream.Collectors.toList());
             if(!list.isEmpty()) {
@@ -221,7 +264,6 @@ public class BizWorkOrderServiceImpl implements IBizWorkOrderService {
             }
         }
 
-        // ======================= 2. 处理其他子表（保持你原有的逻辑不变） =======================
         if (bo.getMaterialList() != null && !bo.getMaterialList().isEmpty()) {
             List<BizWoMaterial> list = org.dromara.common.core.utils.MapstructUtils.convert(bo.getMaterialList(), BizWoMaterial.class);
             list = list.stream()
@@ -256,7 +298,6 @@ public class BizWorkOrderServiceImpl implements IBizWorkOrderService {
             postProcessMapper.insertBatch(list);
         }
 
-        // 👉 新增保存其它订料
         if (bo.getExtraPurchaseList() != null && !bo.getExtraPurchaseList().isEmpty()) {
             List<BizWoExtraPurchase> list = MapstructUtils.convert(bo.getExtraPurchaseList(), BizWoExtraPurchase.class);
             list = list.stream().filter(i -> StringUtils.isNotBlank(i.getItemContent())).collect(java.util.stream.Collectors.toList());
@@ -301,36 +342,68 @@ public class BizWorkOrderServiceImpl implements IBizWorkOrderService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public Boolean auditWorkOrder(BizWorkOrderBo bo) {
-        BizWorkOrder workOrder = new BizWorkOrder();
-        workOrder.setId(bo.getId());
+        BizWorkOrder workOrder = baseMapper.selectById(bo.getId());
+        if (workOrder == null) return false;
+
         workOrder.setAuditStatus(bo.getAuditStatus());
-        workOrder.setAuditBy(org.dromara.common.satoken.utils.LoginHelper.getUsername());
+        workOrder.setAuditBy(LoginHelper.getUsername());
 
         boolean flag = baseMapper.updateById(workOrder) > 0;
 
         // 如果审核状态是“2-已通过”且更新成功
         if (flag && "2".equals(bo.getAuditStatus())) {
-            // 1. 自动生成排产大表格子
             generateScheduleTasks(bo.getId());
-            // 2. 自动生成采购需求单
             generatePurchaseOrders(bo.getId());
-
-            // 3. 自动扣减本厂原材料库存 (来源: 本厂)
             deductInHouseMaterials(bo.getId());
+
+            // 【新增联接】：审批彻底通过后，将工程单中核算的价格回写至销售明细，并将订单推入“待客确”
+            syncPriceToSalesOrder(bo.getId());
         }
 
         return flag;
     }
 
-    /**
-     * 【重构】：根据“其它订料”清单统一生成采购需求单，不再读取原先的材料清单
-     */
+    // ====================================================================
+    // 【新增核心业务】：审批通过后价格反向同步给订单
+    // ====================================================================
+    private void syncPriceToSalesOrder(Long workOrderId) {
+        BizWorkOrder wo = baseMapper.selectById(workOrderId);
+        // 如果这个工单没有关联订单数据，则跳过
+        if (wo == null || wo.getSalesOrderId() == null) return;
+
+        // 1. 获取该工程单下的主要产品用于核价回传 (如果有关联到具体的销售明细)
+        if (wo.getSalesOrderDetailId() != null) {
+            List<BizWoProduct> products = woProductMapper.selectList(
+                new LambdaQueryWrapper<BizWoProduct>().eq(BizWoProduct::getWorkOrderId, workOrderId)
+            );
+
+            if (!products.isEmpty()) {
+                BizWoProduct mainProduct = products.get(0); // 假定取第一条产品线单价为准
+                BizSalesOrderDetail detail = new BizSalesOrderDetail();
+                detail.setId(wo.getSalesOrderDetailId());
+                detail.setUnitPrice(mainProduct.getUnitPrice());
+                detail.setTotalAmount(mainProduct.getTotalAmount());
+
+                salesOrderDetailMapper.updateById(detail);
+            }
+        }
+
+        // 2. 核心修复：更新订单主表状态为 1 (待客确)
+        BizSalesOrder order = salesOrderMapper.selectById(wo.getSalesOrderId());
+        if (order != null && order.getStatus() == 0) { // 只有在“待排单”状态时才推进
+            BizSalesOrder updateOrder = new BizSalesOrder();
+            updateOrder.setId(wo.getSalesOrderId());
+            updateOrder.setStatus(1); // 1 = 待客确
+
+            // 确保更新操作成功执行
+            salesOrderMapper.updateById(updateOrder);
+        }
+    }
+
     private void generatePurchaseOrders(Long workOrderId) {
-        // 1. 查询工单主表获取工单号
         BizWorkOrder wo = baseMapper.selectById(workOrderId);
         if (wo == null) return;
 
-        // 2. 直接查询该工单下的“其它订购(外发/采购集散地)”列表
         List<BizWoExtraPurchase> extraPurchases = extraPurchaseMapper.selectList(
             new LambdaQueryWrapper<BizWoExtraPurchase>()
                 .eq(BizWoExtraPurchase::getWorkOrderId, workOrderId)
@@ -339,39 +412,29 @@ public class BizWorkOrderServiceImpl implements IBizWorkOrderService {
         if (extraPurchases != null && !extraPurchases.isEmpty()) {
             for (BizWoExtraPurchase extra : extraPurchases) {
                 BizPurchase purchase = new BizPurchase();
-
-                // 自动生成采购单号
                 String purchaseNo = "CG" + DateUtil.format(new Date(), "yyyyMMddHHmmss") + RandomUtil.randomNumbers(2);
                 purchase.setPurchaseNo(purchaseNo);
-                purchase.setRelatedWoNo(wo.getWorkOrderNo()); // 绑定工单号
+                purchase.setRelatedWoNo(wo.getWorkOrderNo());
 
-                // 精准匹配实体类里的 itemContent 字段
                 purchase.setItemName(extra.getItemContent());
-                // 绑定规格
                 purchase.setSpec(extra.getSpec());
 
-                // 转换数量
                 if (extra.getQuantity() != null) {
-                    purchase.setApplyQty(new BigDecimal(extra.getQuantity()));
+                    purchase.setApplyQty(new BigDecimal(extra.getQuantity().toString()));
                 }
 
-                purchase.setStatus("0"); // 生成后默认状态为：待处理
-                purchase.setApplicantId(org.dromara.common.satoken.utils.LoginHelper.getUserId());
+                purchase.setStatus("0");
+                purchase.setApplicantId(LoginHelper.getUserId());
 
                 purchaseMapper.insert(purchase);
             }
         }
     }
 
-    /**
-     * 自动生成排产任务及工序节点格子
-     */
     private void generateScheduleTasks(Long workOrderId) {
-        // 1. 查询工单主表信息
         BizWorkOrder wo = baseMapper.selectById(workOrderId);
         if (wo == null) return;
 
-        // 2. 查询该工单下的所有产品明细
         List<BizWoProduct> products = woProductMapper.selectList(
             new LambdaQueryWrapper<BizWoProduct>()
                 .eq(BizWoProduct::getWorkOrderId, workOrderId)
@@ -379,29 +442,20 @@ public class BizWorkOrderServiceImpl implements IBizWorkOrderService {
 
         if (products == null || products.isEmpty()) return;
 
-        // 👉 新增：为生成的单产品流转单做后缀计数
-        int index = 1;
-
-        // 3. 为每个产品生成一行排产记录
         for (BizWoProduct product : products) {
             BizProductionSchedule schedule = new BizProductionSchedule();
             schedule.setWorkOrderId(workOrderId);
             schedule.setWorkOrderNo(wo.getWorkOrderNo());
-
-            // 👉 在排产表存入产品的名称，如果你的排产表有 subOrderNo 字段，请把它存进去
             schedule.setItemName(product.getProductName());
 
-            // 获取数量（优先用生产数量，没有则用订单数量）
             Integer qty = Math.toIntExact(product.getProduceQuantity() != null && product.getProduceQuantity() > 0
                 ? product.getProduceQuantity() : product.getOrderQuantity());
             schedule.setQuantity(qty != null ? qty.longValue() : 0L);
-            schedule.setDeliveryDate(wo.getDeliveryDate()); // 交期
+            schedule.setDeliveryDate(wo.getDeliveryDate());
 
-            // 插入排产主表，MyBatis-Plus 会自动将生成的 ID 赋给 schedule 对象
             scheduleMapper.insert(schedule);
             Long scheduleId = schedule.getId();
 
-            // 4. 定义 Excel 里的标准 10 大工序列 (Code 与 名称)
             String[][] standardNodes = {
                 {"purchase", "采购辅料"},
                 {"face_paper", "面纸"},
@@ -415,26 +469,19 @@ public class BizWorkOrderServiceImpl implements IBizWorkOrderService {
                 {"packing", "打包"}
             };
 
-            // 5. 为这行排产记录，生成 10 个默认状态的格子
             for (String[] nodeInfo : standardNodes) {
                 BizScheduleNode node = new BizScheduleNode();
                 node.setScheduleId(scheduleId);
                 node.setNodeCode(nodeInfo[0]);
                 node.setNodeName(nodeInfo[1]);
-                // 默认状态红色(未开始)，内容为空
                 node.setStatusColor("red");
                 node.setContent("");
-
                 scheduleNodeMapper.insert(node);
             }
         }
     }
 
-    /**
-     * 根据工单材料清单，自动扣减“本厂”来源的原材料库存
-     */
     private void deductInHouseMaterials(Long workOrderId) {
-        // 1. 精准查询该工单下，来源类型为“本厂”的所有材料
         List<BizWoMaterial> materials = materialMapper.selectList(
             new LambdaQueryWrapper<BizWoMaterial>()
                 .eq(BizWoMaterial::getWorkOrderId, workOrderId)
@@ -443,41 +490,134 @@ public class BizWorkOrderServiceImpl implements IBizWorkOrderService {
 
         if (materials == null || materials.isEmpty()) return;
 
-        // 2. 遍历本厂材料，去库存表里找并扣减
         for (BizWoMaterial material : materials) {
-            if (material.getRequireQty() == null || material.getRequireQty() <= 0) {
-                continue; // 数量为0的跳过
-            }
+            if (material.getRequireQty() == null || material.getRequireQty() <= 0) continue;
 
-            // 在库存表中寻找该名称的材料 (这里以物料名称为准进行匹配)
             org.dromara.system.domain.BizInventory inv = inventoryMapper.selectOne(
                 new LambdaQueryWrapper<org.dromara.system.domain.BizInventory>()
                     .eq(org.dromara.system.domain.BizInventory::getItemName, material.getPaperName())
                     .last("limit 1")
             );
 
-            // 校验1：仓库里根本没有这种材料
             if (inv == null) {
                 throw new ServiceException("审批失败：仓库中不存在名为【" + material.getPaperName() + "】的本厂材料，请先去库存管理录入！");
             }
 
-            // 校验2：库存数量不足
             java.math.BigDecimal reqQty = new java.math.BigDecimal(material.getRequireQty());
             if (inv.getCurrentQty().compareTo(reqQty) < 0) {
-                throw new ServiceException("审批失败：本厂材料【" + material.getPaperName() + "】库存不足！当前库存剩余：" + inv.getCurrentQty() + "，工单需要：" + reqQty);
+                throw new ServiceException("审批失败：本厂材料【" + material.getPaperName() + "】库存不足！当前剩余：" + inv.getCurrentQty() + "，工单需要：" + reqQty);
             }
 
-            // 3. 校验通过，执行扣减
             java.math.BigDecimal newQty = inv.getCurrentQty().subtract(reqQty);
             inv.setCurrentQty(newQty);
 
-            // 同步更新剩余库存的总金额
             if (inv.getPurchasePrice() != null) {
                 inv.setTotalAmount(newQty.multiply(inv.getPurchasePrice()));
             }
 
-            // 更新数据库
             inventoryMapper.updateById(inv);
         }
+    }
+
+    // ====================================================================
+    // 【新增】打印工单查询
+    // ====================================================================
+    @Override
+    public BizPrintWorkOrderVo queryPrintWorkOrder(Long id) {
+        BizWorkOrder wo = baseMapper.selectById(id);
+        if (wo == null) {
+            throw new ServiceException("工单不存在");
+        }
+
+        BizPrintWorkOrderVo vo = new BizPrintWorkOrderVo();
+        vo.setCompanyName("中山市梵熙创意纸品有限公司");
+        vo.setWorkOrderNo(wo.getWorkOrderNo());
+        vo.setCustomerName(wo.getCustomerName());
+        vo.setDeliveryDate(wo.getDeliveryDate());
+        vo.setProductDesc(wo.getProductName());
+        vo.setPackRequirement(wo.getPackRequirement());
+        vo.setRemark(wo.getRemark());
+        vo.setPreparedBy(wo.getPreparedBy());
+        vo.setAuditBy(wo.getAuditBy());
+        vo.setApprovedBy(wo.getDAuditor());
+
+        // 销售订单编号
+        if (wo.getSalesOrderId() != null) {
+            BizSalesOrder order = salesOrderMapper.selectById(wo.getSalesOrderId());
+            if (order != null) {
+                vo.setOrderNo(order.getOrderNo());
+            }
+        }
+
+        // 产品列表：拼接题头信息
+        List<BizWoProduct> products = productMapper.selectList(
+            new LambdaQueryWrapper<BizWoProduct>().eq(BizWoProduct::getWorkOrderId, id));
+        if (products != null && !products.isEmpty()) {
+            vo.setProductNos(products.stream()
+                .map(p -> p.getCustomerMaterialNo() != null ? p.getCustomerMaterialNo() : "")
+                .filter(s -> !s.isEmpty())
+                .collect(Collectors.joining("，")));
+            vo.setProductNames(products.stream()
+                .map(p -> p.getProductName() != null ? p.getProductName() : "")
+                .filter(s -> !s.isEmpty())
+                .collect(Collectors.joining("，")));
+            vo.setQuantities(products.stream()
+                .map(p -> p.getProductName() + "：" + (p.getProduceQuantity() != null && p.getProduceQuantity() > 0 ? p.getProduceQuantity() : p.getOrderQuantity()))
+                .collect(Collectors.joining("。")));
+            String logistics = products.stream()
+                .map(BizWoProduct::getLogisticsReq)
+                .filter(s -> s != null && !s.isEmpty())
+                .findFirst().orElse("");
+            vo.setLogisticsReq(logistics);
+        }
+
+        // 材质
+        vo.setMaterialList(materialMapper.selectVoList(
+            new LambdaQueryWrapper<BizWoMaterial>().eq(BizWoMaterial::getWorkOrderId, id)));
+
+        // 委外加工：按字典分类拆分为 印刷+表面处理 / 后续加工
+        Set<String> printProcessNames = resolvePrintProcessNames();
+        List<BizWoOutsourcing> allOutsourcing = outsourcingMapper.selectList(
+            new LambdaQueryWrapper<BizWoOutsourcing>().eq(BizWoOutsourcing::getWorkOrderId, id));
+
+        List<BizWoOutsourcingVo> printSurfaceList = new ArrayList<>();
+        List<BizWoOutsourcingVo> postProcessList = new ArrayList<>();
+        if (allOutsourcing != null) {
+            for (BizWoOutsourcing item : allOutsourcing) {
+                BizWoOutsourcingVo itemVo = MapstructUtils.convert(item, BizWoOutsourcingVo.class);
+                if (item.getProcessProject() != null && printProcessNames.contains(item.getProcessProject())) {
+                    printSurfaceList.add(itemVo);
+                } else {
+                    postProcessList.add(itemVo);
+                }
+            }
+        }
+        vo.setPrintSurfaceList(printSurfaceList);
+        vo.setPostProcessList(postProcessList);
+
+        // 其他配件
+        vo.setExtraPurchaseList(extraPurchaseMapper.selectVoList(
+            new LambdaQueryWrapper<BizWoExtraPurchase>().eq(BizWoExtraPurchase::getWorkOrderId, id)));
+
+        return vo;
+    }
+
+    /**
+     * 从字典解析出印刷类工艺项目名称集合
+     * 逻辑：工艺项目(erp_process_name)的 remark 指向 加工商分类(erp_processor_category)的 value，
+     *       若加工商分类的 label 含"印刷"，则该工艺项目属于印刷类
+     */
+    private Set<String> resolvePrintProcessNames() {
+        List<DictDataDTO> categories = dictService.getDictData("erp_processor_category");
+        Set<String> printCategoryValues = categories.stream()
+            .filter(c -> c.getDictLabel() != null && c.getDictLabel().contains("印刷"))
+            .map(DictDataDTO::getDictValue)
+            .collect(Collectors.toSet());
+
+        List<DictDataDTO> processes = dictService.getDictData("erp_process_name");
+        return processes.stream()
+            .filter(p -> p.getRemark() != null && printCategoryValues.contains(p.getRemark().trim()))
+            .map(DictDataDTO::getDictLabel)
+            .collect(Collectors.toSet());
     }
 }

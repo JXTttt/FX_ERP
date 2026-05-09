@@ -50,6 +50,11 @@ public class BizWoOutsourcingBo extends BaseEntity {
     private String processProject;
 
     /**
+     * 加工细则(如裱坑类型:单E/单B/EE/BB)
+     */
+    private String processDetail;
+
+    /**
      * 成品尺寸
      */
     private String finishSize;
@@ -89,6 +94,26 @@ public class BizWoOutsourcingBo extends BaseEntity {
      */
     private String remark;
 
+    /**
+     * 印刷颜色
+     */
+    private String printColor;
+
+    /**
+     * 印刷模数(如3+3, 4+1)
+     */
+    private String printImpression;
+
+    /**
+     * 印刷机号
+     */
+    private String printMachine;
+
+    /**
+     * 印刷尺寸
+     */
+    private String printSize;
+
 
     /**
      * 材料名称
@@ -109,6 +134,11 @@ public class BizWoOutsourcingBo extends BaseEntity {
      * 材料数量
      */
     private Long materialQty;
+
+    /**
+     * 需生产数量
+     */
+    private BigDecimal needQty;
 
     /**
      * 需生产良品数量

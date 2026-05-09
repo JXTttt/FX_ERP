@@ -57,6 +57,8 @@ public class BizWoExtraPurchase extends BaseEntity {
      */
     private Long totalPrice;
 
+    private String productName;
+
     /**
      * 备注
      */

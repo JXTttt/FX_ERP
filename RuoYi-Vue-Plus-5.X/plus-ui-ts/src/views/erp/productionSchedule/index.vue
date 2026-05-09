@@ -218,7 +218,7 @@ const submitLoading = ref(false);
 
 const queryParams = reactive({
   pageNum: 1,
-  pageSize: 10,
+  pageSize: 50,
   workOrderNo: undefined,
   itemName: undefined,
   status: undefined // 👉 新增：状态筛选参数

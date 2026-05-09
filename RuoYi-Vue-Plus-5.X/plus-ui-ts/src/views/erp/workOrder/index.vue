@@ -29,6 +29,9 @@
             <el-button type="primary" plain icon="Plus" @click="handleAdd" v-hasPermi="['erp:workOrder:add']">新增工单</el-button>
           </el-col>
           <el-col :span="1.5">
+            <el-button type="success" icon="Connection" @click="openSalesOrderList">从销售订单提取</el-button>
+          </el-col>
+          <el-col :span="1.5">
             <el-button type="warning" plain icon="Download" @click="handleExportList" v-hasPermi="['erp:workOrder:export']">导出列表</el-button>
           </el-col>
           <right-toolbar v-model:showSearch="showSearch" @queryTable="getList"></right-toolbar>
@@ -52,15 +55,14 @@
             <span>{{ parseTime(scope.row.deliveryDate, '{y}-{m}-{d}') }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="操作" align="center" fixed="right" width="460">
+        <el-table-column label="操作" align="center" fixed="right" width="360">
           <template #default="scope">
-            <el-button link type="success" icon="View" @click="handleView(scope.row)" v-hasPermi="['erp:workOrder:query']">查看总单</el-button>
-            <el-button link type="primary" icon="DocumentCopy" @click="handlePrintTicket(scope.row)">生产单</el-button>
+            <el-tooltip content="查看" placement="top"><el-button link type="success" icon="View" @click="handleView(scope.row)" v-hasPermi="['erp:workOrder:query']" /></el-tooltip>
+            <el-tooltip content="修改" placement="top"><el-button link type="primary" icon="Edit" @click="handleUpdate(scope.row)" v-if="scope.row.auditStatus !== '2'" v-hasPermi="['erp:workOrder:edit']" /></el-tooltip>
+            <el-tooltip content="审批" placement="top"><el-button link type="primary" icon="Stamp" @click="handleAudit(scope.row)" v-if="scope.row.auditStatus === '1'" v-hasPermi="['erp:workOrder:audit']" /></el-tooltip>
             <el-button link type="warning" icon="Printer" @click="handlePrintOutsourcing(scope.row)" v-hasPermi="['erp:workOrder:query']">委外单</el-button>
-            
-            <el-button link type="primary" icon="Position" @click="handlePushAllOutsourcing(scope.row)" v-if="scope.row.auditStatus === '2'">发送委外单</el-button>
-            <el-button link type="primary" icon="Stamp" @click="handleAudit(scope.row)" v-if="scope.row.auditStatus === '1'" v-hasPermi="['erp:workOrder:audit']">审批</el-button>
-            <el-button link type="primary" icon="Edit" @click="handleUpdate(scope.row)" v-if="scope.row.auditStatus !== '2'" v-hasPermi="['erp:workOrder:edit']">修改</el-button>
+            <el-button link type="success" icon="Tickets" @click="handlePrintFull(scope.row)" v-hasPermi="['erp:workOrder:query']">工程单</el-button>
+            <el-button link type="primary" icon="Position" @click="handlePushAllOutsourcing(scope.row)" v-if="scope.row.auditStatus === '2'">委外发货</el-button>
             <el-button link type="danger" icon="Delete" @click="handleDelete(scope.row)" v-if="scope.row.auditStatus !== '2'" v-hasPermi="['erp:workOrder:remove']">删除</el-button>
           </template>
         </el-table-column>
@@ -68,76 +70,34 @@
       <pagination v-show="total > 0" :total="total" v-model:page="queryParams.pageNum" v-model:limit="queryParams.pageSize" @pagination="getList" />
     </el-card>
 
-    <el-dialog title="请选择要预览/打印的生产流转单" v-model="ticketDialog.visible" width="700px" append-to-body>
-      <el-alert title="系统已将该总单拆分为以下独立产品的生产流转单，请选择对应产品进入预览模式。" type="success" :closable="false" style="margin-bottom: 15px;" />
-      <el-table :data="ticketDialog.productList" border size="small">
-        <el-table-column label="流转单号(子工单)" width="160">
-           <template #default="scope">
-              <strong>{{ ticketDialog.masterOrderNo }}-{{ String(scope.$index + 1).padStart(2, '0') }}</strong>
-           </template>
-        </el-table-column>
-        <el-table-column label="产品名称" prop="productName" />
-        <el-table-column label="生产数量" prop="produceQuantity" width="100" />
-        <el-table-column label="操作" width="120" align="center">
+    <el-dialog title="提取待排产的销售订单" v-model="fetchSoDialog.visible" width="1000px" append-to-body>
+      <el-table v-loading="fetchSoDialog.loading" :data="fetchSoDialog.list" border size="small">
+        <el-table-column label="订单编号" prop="orderNo" width="140" />
+        <el-table-column label="客户名称" prop="customerName" />
+        <el-table-column label="交货日期" prop="deliveryDate" width="110">
           <template #default="scope">
-            <el-button type="primary" size="small" icon="View" @click="openPrintConfig(scope.row, scope.$index)">预览流转单</el-button>
+            <span>{{ parseTime(scope.row.deliveryDate, '{y}-{m}-{d}') }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="160" align="center">
+          <template #default="scope">
+            <el-button type="primary" size="small" icon="MagicStick" @click="initWorkOrderWhole(scope.row)">提取整单并生成</el-button>
+          </template>
+        </el-table-column>
+        <el-table-column type="expand" width="50">
+          <template #default="props">
+            <div style="padding: 10px 20px; background-color: #f8f8f9;">
+              <el-table :data="props.row.detailList" border size="small">
+                <el-table-column label="产品名称" prop="productName" />
+                <el-table-column label="尺寸规格" prop="spec" width="120" />
+                <el-table-column label="材质需求" prop="materialReq" />
+                <el-table-column label="数量" prop="quantity" width="80" />
+              </el-table>
+            </div>
           </template>
         </el-table-column>
       </el-table>
-    </el-dialog>
-
-    <el-dialog :title="`流转单预览/配置: ${printConfig.subOrderNo} - [${printConfig.currentProduct.productName || ''}]`" v-model="printConfig.visible" width="850px" append-to-body>
-      <el-alert title="请勾选该流转单实际需要的【材料】与【工序】，未勾选的内容将不会出现在打印单上。" type="warning" style="margin-bottom: 15px;" :closable="false"/>
-      <el-tabs type="border-card">
-        <el-tab-pane label="材料配置">
-          <el-table ref="printMaterialRef" :data="printConfig.sourceData.materialList" border size="small" @selection-change="val => printConfig.selectedMaterials = val">
-            <el-table-column type="selection" width="45" align="center" />
-            <el-table-column label="部件" prop="partName" width="100" />
-            <el-table-column label="物料名称" prop="paperName" />
-            <el-table-column label="数量" prop="requireQty" width="80" />
-            <el-table-column label="尺寸" prop="paperSize" width="120" />
-          </el-table>
-        </el-tab-pane>
-        <el-tab-pane label="印刷配置">
-          <el-table ref="printPrintRef" :data="printConfig.sourceData.printList" border size="small" @selection-change="val => printConfig.selectedPrints = val">
-            <el-table-column type="selection" width="45" align="center" />
-            <el-table-column label="机台" prop="machineNo" />
-            <el-table-column label="方式" prop="printMethod" width="100" />
-            <el-table-column label="印色" prop="printColor" width="100" />
-            <el-table-column label="实印数" prop="actualPrintQty" width="80" />
-          </el-table>
-        </el-tab-pane>
-        <el-tab-pane label="工艺配置">
-          <el-table ref="printProcessRef" :data="printConfig.sourceData.processList" border size="small" @selection-change="val => printConfig.selectedProcesses = val">
-            <el-table-column type="selection" width="45" align="center" />
-            <el-table-column label="工序名称" prop="processName" width="180" />
-            <el-table-column label="工艺要求/备注" prop="remark" />
-          </el-table>
-        </el-tab-pane>
-        <el-tab-pane label="CTP配置">
-          <el-table ref="printCtpRef" :data="printConfig.sourceData.ctpList" border size="small" @selection-change="val => printConfig.selectedCtps = val">
-            <el-table-column type="selection" width="45" align="center" />
-            <el-table-column label="部件" prop="partName" />
-            <el-table-column label="开数" prop="openNum" width="80" />
-            <el-table-column label="印刷方式" prop="printType" width="100" />
-            <el-table-column label="版数" prop="plateCount" width="80" />
-          </el-table>
-        </el-tab-pane>
-      </el-tabs>
-      
-      <template #footer>
-        <div style="display: flex; justify-content: space-between; align-items: center;">
-          <div>
-            <el-button @click="prevProduct" :disabled="printConfig.currentIndex <= 0" icon="ArrowLeft">上一款产品</el-button>
-            <el-button @click="nextProduct" :disabled="printConfig.currentIndex >= ticketDialog.productList.length - 1">下一款产品 <el-icon class="el-icon--right"><ArrowRight /></el-icon></el-button>
-            <el-button type="warning" plain icon="Edit" @click="jumpToModify">修改工程单</el-button>
-          </div>
-          <div>
-            <el-button type="primary" icon="Printer" @click="executePrint">确认并生成打印单</el-button>
-            <el-button @click="printConfig.visible = false">取消</el-button>
-          </div>
-        </div>
-      </template>
+      <pagination v-show="fetchSoDialog.total > 0" :total="fetchSoDialog.total" v-model:page="fetchSoDialog.pageNum" v-model:limit="fetchSoDialog.pageSize" @pagination="fetchPendingSalesOrders" />
     </el-dialog>
 
     <canvas id="barcodeCanvas" style="display:none;"></canvas>
@@ -146,351 +106,379 @@
       <div style="width: 100%; overflow-x: hidden;">
         <el-form ref="workOrderFormRef" :model="form" :rules="rules" label-width="110px" :disabled="isView">
           
-          <el-divider content-position="left">基础业务信息</el-divider>
+          <el-divider content-position="left">一、基础业务信息</el-divider>
           <el-row :gutter="20">
-            <el-col :span="12">
+            <el-col :span="8">
               <el-form-item label="选择客户" prop="customerId">
                 <el-select v-model="form.customerId" placeholder="请选择客户(必填)" filterable style="width: 100%" @change="handleCustomerChange">
                   <el-option v-for="item in customerOptions" :key="String(item.id)" :label="item.companyName" :value="String(item.id)" />
                 </el-select>
               </el-form-item>
             </el-col>
-            <el-col :span="12">
+            <el-col :span="8">
               <el-form-item label="默认总交期" prop="deliveryDate">
-                <el-date-picker clearable v-model="form.deliveryDate" type="date" value-format="YYYY-MM-DD" placeholder="可在此设定整批产品的默认统一交货日期" style="width: 100%" />
+                <el-date-picker clearable v-model="form.deliveryDate" type="date" value-format="YYYY-MM-DD" placeholder="设定整批产品的默认统一交货日期" style="width: 100%" />
+              </el-form-item>
+            </el-col>
+             <el-col :span="8">
+              <el-form-item label="包装要求" prop="packRequirement">
+                <el-input v-model="form.packRequirement" placeholder="请输入整单包装要求" />
+              </el-form-item>
+            </el-col>
+          </el-row>
+          <el-row>
+            <el-col :span="24">
+              <el-form-item label="总单备注" prop="remark">
+                <el-input v-model="form.remark" placeholder="填写其他补充信息或特殊说明" />
               </el-form-item>
             </el-col>
           </el-row>
 
-          <el-divider content-position="left">产品明细</el-divider>
-          <div class="mb-2" v-if="!isView">
-            <el-button type="primary" plain icon="Plus" size="small" @click="addProductLine">添加产品</el-button>
-          </div>
-          <el-table :data="form.productList" border size="small" style="width: 100%; margin-bottom: 20px;">
-            <el-table-column type="index" width="50" align="center" label="序号" />
+          <el-divider content-position="left">二、产品清单与工艺配置 (多产品隔离)</el-divider>
+          
+          <el-tabs v-model="activeProductTab" type="card" editable @edit="handleProductTabsEdit" style="border: 1px solid #dcdfe6; padding: 10px; background: #fafafa;">
             
-            <el-table-column label="产品名称(必填)" min-width="200">
-              <template #default="scope">
-                <el-input v-model="scope.row.productName" placeholder="产品名称" />
-              </template>
-            </el-table-column>
-            
-            <el-table-column label="专属交期" width="145">
-              <template #default="scope">
-                <el-date-picker clearable v-model="scope.row.deliveryDate" type="date" value-format="YYYY-MM-DD" placeholder="为空则用总交期" style="width: 100%" />
-              </template>
-            </el-table-column>
-            
-            <el-table-column label="客户PO号" width="125">
-              <template #default="scope"><el-input v-model="scope.row.customerPo" placeholder="PO号" /></template>
-            </el-table-column>
-            
-            <el-table-column label="客户物料号" width="125">
-              <template #default="scope"><el-input v-model="scope.row.customerMaterialNo" placeholder="物料号" /></template>
-            </el-table-column>
-            
-            <el-table-column label="规格" width="125">
-              <template #default="scope"><el-input v-model="scope.row.spec" placeholder="长x宽x高" /></template>
-            </el-table-column>
-            
-            <el-table-column label="层数" width="100">
-              <template #default="scope">
-                <el-select v-model="scope.row.layers" placeholder="层数" allow-create filterable @blur="(e: any) => handleSelectBlur(e, scope.row, 'layers')">
-                  <el-option label="单E" value="单E" /><el-option label="单B" value="单B" />
-                  <el-option label="EE" value="EE" /><el-option label="BB" value="BB" />
-                </el-select>
-              </template>
-            </el-table-column>
-            
-            <el-table-column label="刀版号" width="140">
-              <template #default="scope"><el-input v-model="scope.row.knifePlateNo" placeholder="刀版号" /></template>
-            </el-table-column>
-            
-            <el-table-column label="订单数量" width="90">
-              <template #default="scope">
-                <el-input-number v-model="scope.row.orderQuantity" :min="1" style="width: 100%" :controls="false" @change="(val) => handleOrderQtyChange(val as number, scope.row)" />
-              </template>
-            </el-table-column>
-            
-            <el-table-column label="生产数量" width="90">
-              <template #default="scope">
-                <el-input-number v-model="scope.row.produceQuantity" :min="1" style="width: 100%" :controls="false" @change="calcProductTotal(scope.row)" />
-              </template>
-            </el-table-column>
-            
-            <el-table-column label="单位" width="55">
-              <template #default="scope"><el-input v-model="scope.row.unit" placeholder="个" /></template>
-            </el-table-column>
-            
-            <el-table-column label="单价" width="80">
-              <template #default="scope">
-                <el-input-number v-model="scope.row.unitPrice" :precision="4" :step="0.1" :min="0" :controls="false" style="width: 100%" @change="calcProductTotal(scope.row)" />
-              </template>
-            </el-table-column>
-            
-            <el-table-column label="总金额" width="110">
-              <template #default="scope"><el-input v-model="scope.row.totalAmount" disabled /></template>
-            </el-table-column>
-            
-            <el-table-column label="操作" width="70" align="center" fixed="right" v-if="!isView">
-              <template #default="scope">
-                <el-button link type="danger" @click="removeLine('productList', scope.$index)">移除</el-button>
-              </template>
-            </el-table-column>
-          </el-table>
+            <el-tab-pane 
+              v-for="(product, pIndex) in form.productList" 
+              :key="product.uid" 
+              :label="product.productName || `未命名产品 ${Number(pIndex) + 1}`" 
+              :name="product.uid"
+            >
+              <el-card shadow="never" style="margin-bottom: 15px; border-top: 3px solid #409EFF;">
+                <template #header><span style="font-weight: bold;">{{ product.productName || '请输入产品名称' }} - 基本属性</span></template>
+                <el-row :gutter="15">
+                  <el-col :span="6">
+                    <el-form-item label="产品名称(必填)" label-width="120px">
+                      <el-input v-model="product.productName" placeholder="如：中秋月饼盒" />
+                    </el-form-item>
+                  </el-col>
+                  <el-col :span="6">
+                    <el-form-item label="专属交期" label-width="80px">
+                      <el-date-picker clearable v-model="product.deliveryDate" type="date" value-format="YYYY-MM-DD" placeholder="为空用总交期" style="width: 100%" />
+                    </el-form-item>
+                  </el-col>
+                  <el-col :span="6">
+                    <el-form-item label="客户PO号" label-width="80px">
+                      <el-input v-model="product.customerPo" placeholder="PO号" />
+                    </el-form-item>
+                  </el-col>
+                  <el-col :span="6">
+                    <el-form-item label="客户物料号" label-width="90px">
+                      <el-input v-model="product.customerMaterialNo" placeholder="物料号" />
+                    </el-form-item>
+                  </el-col>
+                </el-row>
+                <el-row :gutter="15">
+                  <el-col :span="6">
+                    <el-form-item label="规格" label-width="120px">
+                      <el-input v-model="product.spec" placeholder="长x宽x高" />
+                    </el-form-item>
+                  </el-col>
+                  <el-col :span="6">
+                    <el-form-item label="刀版号" label-width="80px">
+                      <el-input v-model="product.knifePlateNo" placeholder="系统生成" disabled />
+                    </el-form-item>
+                  </el-col>
+                  <el-col :span="6">
+                    <el-form-item label="单位" label-width="90px">
+                      <el-input v-model="product.unit" placeholder="个" />
+                    </el-form-item>
+                  </el-col>
+                </el-row>
+                <el-row :gutter="15">
+                  <el-col :span="6">
+                    <el-form-item label="订单数量" label-width="120px">
+                      <el-input-number v-model="product.orderQuantity" :min="1" style="width: 100%" :controls="false" @change="(val: any) => handleOrderQtyChange(val, product)" />
+                    </el-form-item>
+                  </el-col>
+                  <el-col :span="6">
+                    <el-form-item label="生产数量" label-width="80px">
+                      <el-input-number v-model="product.produceQuantity" :min="1" style="width: 100%" :controls="false" @change="() => calcProductTotal(product)" />
+                    </el-form-item>
+                  </el-col>
+                  <el-col :span="6">
+                    <el-form-item label="单价" label-width="80px">
+                      <el-input-number v-model="product.unitPrice" :precision="4" :step="0.1" :min="0" :controls="false" style="width: 100%" @change="() => calcProductTotal(product)" />
+                    </el-form-item>
+                  </el-col>
+                  <el-col :span="6">
+                    <el-form-item label="总金额" label-width="90px">
+                      <el-input v-model="product.totalAmount" disabled />
+                    </el-form-item>
+                  </el-col>
+                </el-row>
+                <el-row :gutter="15">
+                  <el-col :span="8">
+                    <el-form-item label="包装需求" label-width="120px">
+                      <el-autocomplete
+                        v-model="product.packRequirement"
+                        :fetch-suggestions="querySearchPack"
+                        placeholder="如: 平装, 精装"
+                        clearable
+                        style="width: 100%"
+                      />
+                    </el-form-item>
+                  </el-col>
+                  <el-col :span="8">
+                    <el-form-item label="物流要求" label-width="80px">
+                      <el-autocomplete
+                        v-model="product.logisticsReq"
+                        :fetch-suggestions="querySearchLogistics"
+                        placeholder="如: 快递, 自提"
+                        clearable
+                        style="width: 100%"
+                      />
+                    </el-form-item>
+                  </el-col>
+                </el-row>
+              </el-card>
 
-          <el-tabs type="border-card" v-model="activeTab">
-            <el-tab-pane label="材料清单" name="materialList">
-              <div class="mb-2" v-if="!isView"><el-button type="primary" plain icon="Plus" size="small" @click="addLine('materialList')">添加材料</el-button></div>
-              <el-table :data="form.materialList" border size="small" style="width: 100%;">
-                <el-table-column label="部件(必填)" width="140">
-                  <template #default="scope">
-                    <el-select v-model="scope.row.partName" placeholder="纸张/配件" allow-create filterable default-first-option @blur="(e: any) => handleSelectBlur(e, scope.row, 'partName')">
-                      <el-option v-for="dict in erp_item_type" :key="dict.value" :label="dict.label" :value="dict.label" />
-                    </el-select>
-                  </template>
-                </el-table-column>
-                <el-table-column label="来源" width="120">
-                  <template #default="scope">
-                    <el-select v-model="scope.row.sourceType" placeholder="来源">
-                      <el-option label="自来" value="自来" /><el-option label="订购" value="订购" /><el-option label="本厂" value="本厂" />
-                    </el-select>
-                  </template>
-                </el-table-column>
-                <el-table-column label="物料名称(必填)" min-width="150">
-                  <template #default="scope">
-                    <el-select v-model="scope.row.paperName" filterable allow-create default-first-option placeholder="选库存/自填" style="width: 100%" @change="(val) => handleMaterialChange(val as string, scope.row)" @blur="(e: any) => handleSelectBlur(e, scope.row, 'paperName')">
-                      <el-option-group v-for="group in inventoryOptions" :key="group.label" :label="group.label">
-                        <el-option v-for="item in group.options" :key="item.id || item.itemName" :label="item.itemName" :value="item.itemName">
-                          <span style="float: left">{{ item.itemName }}</span>
-                          <span style="float: right; color: #8492a6; font-size: 12px">库存: <span style="color:#F56C6C;font-weight:bold;">{{ item.currentQty || 0 }}</span> | {{ item.spec || '无规格' }}</span>
-                        </el-option>
-                      </el-option-group>
-                    </el-select>
-                  </template>
-                </el-table-column>
-                <el-table-column label="尺寸/规格" width="150">
-                  <template #default="scope">
-                    <el-input v-model="scope.row.paperSize" placeholder="自动带出或手填" :disabled="scope.row.sourceType === '本厂'" />
-                  </template>
-                </el-table-column>
-                <el-table-column label="数量" width="160">
-                  <template #default="scope">
-                    <el-input-number v-model="scope.row.requireQty" :min="0" :controls="false" style="width: 100%" @change="(val) => checkMaterialQty(val as number, scope.row)" />
-                  </template>
-                </el-table-column>
-                <el-table-column label="切成" width="160">
-                  <template #default="scope"><el-input v-model="scope.row.cutMethod" /></template>
-                </el-table-column>
-                <el-table-column label="操作" width="130" align="center" fixed="right" v-if="!isView">
-                  <template #default="scope">
-                    <el-button v-if="scope.row.sourceType === '订购'" link type="primary" icon="Position" @click="handleToExtraPurchase(scope.row)">转订购</el-button>
-                    <el-button link type="danger" icon="Delete" @click="removeLine('materialList', scope.$index)">移除</el-button>
-                  </template>
-                </el-table-column>
-              </el-table>
-            </el-tab-pane>
+              <el-tabs type="border-card">
+                <el-tab-pane label="1. 材料清单">
+                  <div class="mb-2" v-if="!isView"><el-button type="primary" plain icon="Plus" size="small" @click="addLine(pIndex, 'materialList')">添加材料</el-button></div>
+                  <el-table :data="product.materialList" border size="small" style="width: 100%;">
+                    <el-table-column label="部件(必填)" width="140">
+                      <template #default="scope">
+                        <el-autocomplete
+                          v-model="scope.row.partName"
+                          :fetch-suggestions="querySearchPart"
+                          placeholder="纸张/配件"
+                          clearable
+                          style="width: 100%"
+                        />
+                      </template>
+                    </el-table-column>
+                    <el-table-column label="来源" width="120">
+                      <template #default="scope">
+                        <el-select v-model="scope.row.sourceType" placeholder="来源">
+                          <el-option label="自来" value="自来" /><el-option label="订购" value="订购" /><el-option label="本厂" value="本厂" />
+                        </el-select>
+                      </template>
+                    </el-table-column>
+                    <el-table-column label="物料名称(必填)" min-width="150">
+                      <template #default="scope">
+                        <el-autocomplete
+                          v-model="scope.row.paperName"
+                          :fetch-suggestions="querySearchMaterial"
+                          placeholder="选库存/自填"
+                          clearable
+                          style="width: 100%"
+                          @select="(item: any) => handleMaterialChange(item.value, scope.row)"
+                        >
+                          <template #default="{ item }">
+                            <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                              <span>{{ item.value }}</span>
+                              <span style="color: #8492a6; font-size: 12px;">
+                                库存: <span style="color:#F56C6C;font-weight:bold;">{{ item.currentQty || 0 }}</span> | {{ item.spec || '无规格' }}
+                              </span>
+                            </div>
+                          </template>
+                        </el-autocomplete>
+                      </template>
+                    </el-table-column>
+                    <el-table-column label="尺寸/规格" width="150">
+                      <template #default="scope">
+                        <el-input v-model="scope.row.paperSize" placeholder="自动带出或手填" :disabled="scope.row.sourceType === '本厂'" />
+                      </template>
+                    </el-table-column>
+                    <el-table-column label="数量" width="160">
+                      <template #default="scope">
+                        <el-input-number v-model="scope.row.requireQty" :min="0" :controls="false" style="width: 100%" @change="(val: any) => checkMaterialQty(val, scope.row)" />
+                      </template>
+                    </el-table-column>
+                    <el-table-column label="版次" width="100">
+                      <template #default="scope"><el-input v-model="scope.row.edition" placeholder="版次" /></template>
+                    </el-table-column>
+                    <el-table-column label="切成" width="160">
+                      <template #default="scope"><el-input v-model="scope.row.cutMethod" /></template>
+                    </el-table-column>
+                    <el-table-column label="操作" width="130" align="center" fixed="right" v-if="!isView">
+                      <template #default="scope">
+                        <el-button v-if="scope.row.sourceType === '订购'" link type="primary" icon="Position" @click="handleToExtraPurchase(scope.row)">转订购</el-button>
+                        <el-button link type="danger" icon="Delete" @click="removeLine(pIndex, 'materialList', scope.$index)">移除</el-button>
+                      </template>
+                    </el-table-column>
+                  </el-table>
+                </el-tab-pane>
 
-            <el-tab-pane label="其它订料" name="extraPurchaseList">
-              <div class="mb-2" v-if="!isView">
-                <el-button type="primary" plain icon="Plus" size="small" @click="addLine('extraPurchaseList')">添加订料</el-button>
-              </div>
-              <el-table :data="form.extraPurchaseList" border size="small" style="width: 100%;">
-                <el-table-column label="采购内容(项目/内容)" min-width="200">
-                  <template #default="scope">
-                    <el-input v-model="scope.row.itemContent" placeholder="例: 网购-双层5丝OPP袋 / 纸张-300克白卡" />
-                  </template>
-                </el-table-column>
-                <el-table-column label="规格" width="200">
-                  <template #default="scope">
-                    <el-input v-model="scope.row.spec" placeholder="请输入规格尺寸" />
-                  </template>
-                </el-table-column>
-                <el-table-column label="数量" width="150">
-                  <template #default="scope">
-                    <el-input-number v-model="scope.row.quantity" :min="1" style="width: 100%" :controls="false" />
-                  </template>
-                </el-table-column>
-                <el-table-column label="备注" min-width="150">
-                  <template #default="scope">
-                    <el-input v-model="scope.row.remark" placeholder="备注说明" />
-                  </template>
-                </el-table-column>
-                <el-table-column label="操作" width="70" align="center" fixed="right" v-if="!isView">
-                  <template #default="scope">
-                    <el-button link type="danger" @click="removeLine('extraPurchaseList', scope.$index)">移除</el-button>
-                  </template>
-                </el-table-column>
-              </el-table>
-            </el-tab-pane>
+                <el-tab-pane label="2. 印刷及工艺明细">
+                  <div class="mb-2" v-if="!isView" style="display: flex; align-items: center; gap: 10px;">
+                    <el-button type="primary" plain icon="Plus" size="small" @click="addLine(pIndex, 'processList')">添加空行</el-button>
+                    <el-cascader v-model="batchProcessSelection" :options="processTreeData" :props="{ multiple: true, emitPath: false }" collapse-tags clearable filterable placeholder="批量添加工艺/印刷(支持多选)" style="width: 280px" popper-class="hide-first-level-checkbox" />
+                    <el-button type="success" size="small" @click="confirmBatchAddProcess(pIndex)">批量添加至下方</el-button>
+                    <el-button type="warning" size="small" icon="Select" @click="transferSelectedToOutsourcing(pIndex)" style="margin-left: auto;">将勾选项转委外</el-button>
+                    <el-button type="danger" size="small" icon="Position" @click="handleBatchToOutsourcing(pIndex)">一键全部转委外</el-button>
+                  </div>
+                  <el-table
+                    :data="product.processList"
+                    border size="small" style="width: 100%;"
+                    @selection-change="(rows: any) => handleProcessSelectionChange(pIndex, rows)"
+                    ref="processTableRefs"
+                  >
+                    <el-table-column type="selection" width="40" v-if="!isView" />
+                    <el-table-column label="工序名称" width="280">
+                      <template #default="scope">
+                        <el-select v-if="!isView" v-model="scope.row.processName" filterable allow-create default-first-option placeholder="选填工序" style="width: 100%">
+                          <el-option v-for="dict in allOutsourcingProjects" :key="dict.value" :label="dict.label" :value="dict.label" />
+                        </el-select>
+                        <span v-else>{{ scope.row.processName }}</span>
+                      </template>
+                    </el-table-column>
+                    <el-table-column label="加工细则" width="120">
+                      <template #default="scope">
+                        <el-select v-if="!isView" v-model="scope.row.processDetail" filterable clearable placeholder="工序细则" style="width: 100%">
+                          <el-option v-for="opt in getProcessDetailOptions(scope.row.processName)" :key="opt.value" :label="opt.label" :value="opt.label" />
+                        </el-select>
+                        <span v-else>{{ scope.row.processDetail }}</span>
+                      </template>
+                    </el-table-column>
+                    <el-table-column label="具体要求/机器要求/备注" min-width="200">
+                      <template #default="scope"><el-input v-model="scope.row.remark" placeholder="如：正反印、机器名、尺寸说明" /></template>
+                    </el-table-column>
+                    <el-table-column label="操作" width="180" align="center" fixed="right" v-if="!isView">
+                      <template #default="scope">
+                        <el-button type="primary" link icon="Position" @click="handleToOutsourcing(pIndex, scope.row)">转委外</el-button>
+                        <el-button type="danger" link icon="Delete" @click="removeLine(pIndex, 'processList', scope.$index)">移除</el-button>
+                      </template>
+                    </el-table-column>
+                  </el-table>
+                </el-tab-pane>
 
-            <el-tab-pane label="印刷加工" name="printList">
-              <div class="mb-2" v-if="!isView"><el-button type="primary" plain icon="Plus" size="small" @click="addLine('printList')">添加印刷记录</el-button></div>
-              <el-table :data="form.printList" border size="small" style="width: 100%;">
-                <el-table-column label="印刷机号/机台" min-width="140">
-                  <template #default="scope"><el-input v-model="scope.row.machineNo" placeholder="如: 联丰/对开海德堡" /></template>
-                </el-table-column>
-                <el-table-column label="印刷方式" width="130">
-                  <template #default="scope">
-                    <el-select v-model="scope.row.printMethod" allow-create filterable default-first-option placeholder="选/填" style="width: 100%" @blur="(e: any) => handleSelectBlur(e, scope.row, 'printMethod')">
-                      <el-option v-for="dict in erp_print_type" :key="dict.value" :label="dict.label" :value="dict.label" />
-                    </el-select>
-                  </template>
-                </el-table-column>
-                <el-table-column label="印刷颜色" width="130">
-                  <template #default="scope">
-                    <el-select v-model="scope.row.printColor" allow-create filterable default-first-option placeholder="选/填" style="width: 100%" @blur="(e: any) => handleSelectBlur(e, scope.row, 'printColor')">
-                      <el-option v-for="dict in erp_print_color" :key="dict.value" :label="dict.label" :value="dict.label" />
-                    </el-select>
-                  </template>
-                </el-table-column>
-                <el-table-column label="印刷尺寸" width="140">
-                  <template #default="scope"><el-input v-model="scope.row.printSize" placeholder="如: 545*800mm" /></template>
-                </el-table-column>
-                <el-table-column label="模数" width="100">
-                  <template #default="scope"><el-input v-model="scope.row.moldNum" placeholder="3+3" /></template>
-                </el-table-column>
-                <el-table-column label="印刷实数(正数)" width="130">
-                  <template #default="scope"><el-input-number v-model="scope.row.actualPrintQty" :min="0" style="width: 100%" :controls="false"/></template>
-                </el-table-column>
-                <el-table-column label="损耗数(印损)" width="120">
-                  <template #default="scope"><el-input-number v-model="scope.row.lossQty" :min="0" style="width: 100%" :controls="false"/></template>
-                </el-table-column>
-                <el-table-column label="备注" min-width="160">
-                  <template #default="scope"><el-input v-model="scope.row.remark" placeholder="如: QR250417拼3个" /></template>
-                </el-table-column>
-                <el-table-column label="操作" width="70" align="center" fixed="right" v-if="!isView">
-                  <template #default="scope"><el-button link type="danger" @click="removeLine('printList', scope.$index)">移除</el-button></template>
-                </el-table-column>
-              </el-table>
-            </el-tab-pane>
+                <el-tab-pane label="3. 委外加工单">
+                  <div class="mb-2" v-if="!isView"><el-button type="primary" plain icon="Plus" size="small" @click="addLine(pIndex, 'outsourcingList')">手动加外发</el-button></div>
+                  <el-table :data="product.outsourcingList" border size="small" style="width: 100%;" overflow-x="auto">
+                    
+                    <el-table-column label="针对材料" width="130">
+                      <template #default="scope">
+                        <el-select v-model="scope.row.materialName" filterable allow-create placeholder="选择本单材料">
+                           <el-option v-for="mat in product.materialList" :key="mat.paperName" :label="mat.paperName" :value="mat.paperName" />
+                        </el-select>
+                      </template>
+                    </el-table-column>
 
-            <el-tab-pane label="生产工艺明细" name="processList">
-              <div class="mb-2" v-if="!isView" style="display: flex; align-items: center; gap: 10px;">
-                <el-button type="primary" plain icon="Plus" size="small" @click="addLine('processList')">添加空行</el-button>
-                
-                <el-cascader
-                  v-model="batchProcessSelection"
-                  :options="processTreeData"
-                  :props="{ multiple: true, emitPath: false }"
-                  collapse-tags
-                  collapse-tags-tooltip
-                  clearable 
-                  filterable 
-                  placeholder="批量选择工艺(支持多级多选)" 
-                  style="width: 280px"
-                />
-                <el-button type="success" size="small" @click="confirmBatchAddProcess">批量添加至下方</el-button>
-                </div>
+                    <el-table-column label="加工工序" width="130">
+                      <template #default="scope">
+                        <el-select v-if="!isView" v-model="scope.row.processProject" filterable allow-create placeholder="选/填" style="width: 100%">
+                          <el-option v-for="dict in allOutsourcingProjects" :key="dict.value" :label="dict.label" :value="dict.label" />
+                        </el-select>
+                        <span v-else>{{ scope.row.processProject }}</span>
+                      </template>
+                    </el-table-column>
 
-              <el-table :data="form.processList" border size="small" style="width: 100%;">
-                <el-table-column label="工序名称" width="280">
-                  <template #default="scope">
-                    <el-select v-if="!isView" v-model="scope.row.processName" filterable allow-create default-first-option placeholder="选择标准工艺或自行输入" style="width: 100%" @blur="(e: any) => handleSelectBlur(e, scope.row, 'processName')">
-                      <el-option v-for="dict in erp_process_name" :key="dict.value" :label="dict.label" :value="dict.label" />
-                    </el-select>
-                    <span v-else>{{ scope.row.processName }}</span>
-                  </template>
-                </el-table-column>
-                <el-table-column label="工艺要求/备注" min-width="200">
-                  <template #default="scope"><el-input v-model="scope.row.remark" placeholder="请输入具体要求" /></template>
-                </el-table-column>
-                <el-table-column label="操作" width="180" align="center" fixed="right" v-if="!isView">
-                  <template #default="scope">
-                    <el-button type="primary" link icon="Position" @click="handleToOutsourcing(scope.row)">转委外</el-button>
-                    <el-button type="danger" link icon="Delete" @click="removeLine('processList', scope.$index)">移除</el-button>
-                  </template>
-                </el-table-column>
-              </el-table>
-            </el-tab-pane>
+                    <el-table-column label="加工细则" width="120">
+                      <template #default="scope">
+                        <el-select v-if="!isView" v-model="scope.row.processDetail" filterable clearable placeholder="工序细则" style="width: 100%">
+                          <el-option v-for="opt in getProcessDetailOptions(scope.row.processProject)" :key="opt.value" :label="opt.label" :value="opt.label" />
+                        </el-select>
+                        <span v-else>{{ scope.row.processDetail }}</span>
+                      </template>
+                    </el-table-column>
 
-            <el-tab-pane label="模具制版" name="ctpList">
-              <div class="mb-2" v-if="!isView"><el-button type="primary" plain icon="Plus" size="small" @click="addLine('ctpList')">添加模具</el-button></div>
-              <el-table :data="form.ctpList" border size="small" style="width: 100%;">
-                <el-table-column label="部件" min-width="150"><template #default="scope"><el-input v-model="scope.row.partName" /></template></el-table-column>
-                <el-table-column label="开数" width="120"><template #default="scope"><el-input-number v-model="scope.row.openNum" :min="1" :max="9" style="width: 100%" :controls="false" /></template></el-table-column>
-                <el-table-column label="印刷方式" width="150">
-                  <template #default="scope">
-                    <el-select v-model="scope.row.printType" allow-create filterable @blur="(e: any) => handleSelectBlur(e, scope.row, 'printType')">
-                      <el-option label="单面" value="单面" /><el-option label="正反" value="正反" />
-                      <el-option label="自反" value="自反" /><el-option label="天地反" value="天地反" />
-                    </el-select>
-                  </template>
-                </el-table-column>
-                <el-table-column label="套数" width="120"><template #default="scope"><el-input-number v-model="scope.row.setNum" :min="1" style="width: 100%" :controls="false"/></template></el-table-column>
-                <el-table-column label="CTP版数" width="120"><template #default="scope"><el-input-number v-model="scope.row.plateCount" :min="1" style="width: 100%" :controls="false"/></template></el-table-column>
-                <el-table-column label="操作" width="70" align="center" fixed="right" v-if="!isView"><template #default="scope"><el-button link type="danger" @click="removeLine('ctpList', scope.$index)">移除</el-button></template></el-table-column>
-              </el-table>
-            </el-tab-pane>
-            
-            <el-tab-pane label="委外加工单" name="outsourcingList">
-              <div class="mb-2" v-if="!isView"><el-button type="primary" plain icon="Plus" size="small" @click="addLine('outsourcingList')">手动添加外发</el-button></div>
-              <el-table :data="form.outsourcingList" border size="small" style="width: 100%;" overflow-x="auto">
-                <el-table-column label="产品名称" min-width="130" fixed="left"><template #default="scope"><el-input v-model="scope.row.productName" /></template></el-table-column>
-                <el-table-column label="材料名称" min-width="130"><template #default="scope"><el-input v-model="scope.row.materialName" placeholder="输入材料" /></template></el-table-column>
-                
-                <el-table-column label="长(mm)" width="75"><template #default="scope"><el-input-number v-model="scope.row.length" :controls="false" style="width: 100%" @change="calcTotalPrice(scope.row)"/></template></el-table-column>
-                <el-table-column label="宽(mm)" width="75"><template #default="scope"><el-input-number v-model="scope.row.width" :controls="false" style="width: 100%" @change="calcTotalPrice(scope.row)"/></template></el-table-column>
-                <el-table-column label="材料数量" width="90"><template #default="scope"><el-input-number v-model="scope.row.processQty" :controls="false" style="width: 100%" @change="calcTotalPrice(scope.row)" /></template></el-table-column>
-                
-                <el-table-column label="加工工序" width="130">
-                  <template #default="scope">
-                    <el-select v-if="!isView" v-model="scope.row.processProject" filterable allow-create default-first-option placeholder="选/填" style="width: 100%" @blur="(e: any) => handleSelectBlur(e, scope.row, 'processProject')">
-                      <el-option v-for="dict in erp_process_name" :key="dict.value" :label="dict.label" :value="dict.label" />
-                    </el-select>
-                    <span v-else>{{ scope.row.processProject }}</span>
-                  </template>
-                </el-table-column>
-                
-                <el-table-column label="加工商/供应商" width="130">
-                  <template #default="scope">
-                    <el-select v-model="scope.row.supplierId" placeholder="选择加工商" filterable>
-                      <el-option 
-                        v-for="item in getFilteredSuppliers(scope.row.processProject)" 
-                        :key="String(item.id)" 
-                        :label="item.shortName || item.companyName" 
-                        :value="String(item.id)"
-                      >
-                        <span style="float: left">{{ item.shortName || item.companyName }}</span>
-                        <span style="float: right; color: #8492a6; font-size: 12px; margin-left: 10px;" v-if="item.shortName">{{ item.companyName }}</span>
-                      </el-option>
-                    </el-select>
-                  </template>
-                </el-table-column>
+                    <el-table-column label="印刷颜色" width="100">
+                      <template #default="scope">
+                        <el-select v-if="!isView" v-model="scope.row.printColor" filterable clearable placeholder="颜色" style="width: 100%" :disabled="!isPrintRow(scope.row)">
+                          <el-option v-for="dict in erp_print_color" :key="dict.value" :label="dict.label" :value="dict.label" />
+                        </el-select>
+                        <span v-else>{{ scope.row.printColor }}</span>
+                      </template>
+                    </el-table-column>
+                    <el-table-column label="模数" width="80">
+                      <template #default="scope">
+                        <el-input v-if="!isView" v-model="scope.row.printImpression" placeholder="3+3" :disabled="!isPrintRow(scope.row)" />
+                        <span v-else>{{ scope.row.printImpression }}</span>
+                      </template>
+                    </el-table-column>
+                    <el-table-column label="印刷机号" width="100">
+                      <template #default="scope">
+                        <el-input v-if="!isView" v-model="scope.row.printMachine" placeholder="机号" :disabled="!isPrintRow(scope.row)" />
+                        <span v-else>{{ scope.row.printMachine }}</span>
+                      </template>
+                    </el-table-column>
 
-                <el-table-column label="需良品数" width="90"><template #default="scope"><el-input-number v-model="scope.row.goodQty" :controls="false" style="width: 100%" @change="calcTotalPrice(scope.row)"/></template></el-table-column>
-                <el-table-column label="算价方式" width="85">
-                  <template #default="scope">
-                    <el-select v-model="scope.row.unit" @change="calcTotalPrice(scope.row)">
-                      <el-option label="平方米" value="平方米"/><el-option label="张" value="张"/><el-option label="套" value="套"/>
-                    </el-select>
-                  </template>
-                </el-table-column>
-                <el-table-column label="加工单价" width="90"><template #default="scope"><el-input-number v-model="scope.row.unitPrice" :min="0" :precision="4" :controls="false" style="width: 100%" @change="calcTotalPrice(scope.row)"/></template></el-table-column>
-                <el-table-column label="加工金额" width="100"><template #default="scope"><el-input-number v-model="scope.row.totalPrice" :min="0" :precision="2" :controls="false" style="width: 100%" disabled/></template></el-table-column>
-                <el-table-column label="交货期" width="145"><template #default="scope"><el-date-picker v-model="scope.row.deliveryDate" type="date" value-format="YYYY-MM-DD" style="width: 100%" /></template></el-table-column>
-                <el-table-column label="备注" min-width="120"><template #default="scope"><el-input v-model="scope.row.remark" /></template></el-table-column>
-                <el-table-column label="操作" width="60" align="center" fixed="right" v-if="!isView">
-                  <template #default="scope">
-                    <el-button link type="danger" @click="removeLine('outsourcingList', scope.$index)">移除</el-button>
-                  </template>
-                </el-table-column>
-              </el-table>
+                    <el-table-column label="加工商/供应商" width="140">
+                      <template #default="scope">
+                        <el-select v-model="scope.row.supplierId" placeholder="选择加工商" filterable>
+                          <el-option v-for="item in getFilteredSuppliers(scope.row.processProject)" :key="String(item.id)" :label="item.shortName || item.companyName" :value="String(item.id)">
+                            <span style="float: left">{{ item.shortName || item.companyName }}</span>
+                          </el-option>
+                        </el-select>
+                      </template>
+                    </el-table-column>
+
+                    <el-table-column label="长(mm)" width="80">
+                      <template #default="scope">
+                        <el-input-number v-model="scope.row.length" :controls="false" style="width: 100%" @change="() => calcTotalPrice(scope.row)"/>
+                      </template>
+                    </el-table-column>
+                    <el-table-column label="宽(mm)" width="80">
+                      <template #default="scope">
+                        <el-input-number v-model="scope.row.width" :controls="false" style="width: 100%" @change="() => calcTotalPrice(scope.row)"/>
+                      </template>
+                    </el-table-column>
+                    <el-table-column label="高(mm)" width="80">
+                      <template #default="scope">
+                        <el-input-number v-model="scope.row.height" :controls="false" style="width: 100%" />
+                      </template>
+                    </el-table-column>
+                    
+                    <el-table-column label="数量" width="80">
+                      <template #default="scope">
+                        <el-input-number v-model="scope.row.processQty" :controls="false" style="width: 100%" @change="() => calcTotalPrice(scope.row)" />
+                      </template>
+                    </el-table-column>
+                    <el-table-column label="良品数" width="80">
+                      <template #default="scope">
+                        <el-input-number v-model="scope.row.goodQty" :controls="false" style="width: 100%"/>
+                      </template>
+                    </el-table-column>
+                    
+                    <el-table-column label="算价方式" width="80">
+                      <template #default="scope">
+                        <el-select v-model="scope.row.unit" @change="() => calcTotalPrice(scope.row)">
+                          <el-option label="平方米" value="平方米"/><el-option label="张" value="张"/><el-option label="套" value="套"/>
+                        </el-select>
+                      </template>
+                    </el-table-column>
+                    <el-table-column label="单价" width="80">
+                      <template #default="scope">
+                        <el-input-number v-model="scope.row.unitPrice" :min="0" :precision="4" :controls="false" style="width: 100%" @change="() => calcTotalPrice(scope.row)"/>
+                      </template>
+                    </el-table-column>
+                    <el-table-column label="金额" width="80">
+                      <template #default="scope">
+                        <el-input-number v-model="scope.row.totalPrice" :min="0" :precision="2" :controls="false" style="width: 100%" disabled/>
+                      </template>
+                    </el-table-column>
+                    <el-table-column label="操作" width="60" align="center" fixed="right" v-if="!isView">
+                      <template #default="scope">
+                        <el-button link type="danger" @click="removeLine(pIndex, 'outsourcingList', scope.$index)">移除</el-button>
+                      </template>
+                    </el-table-column>
+                  </el-table>
+                </el-tab-pane>
+
+                <el-tab-pane label="4. 模具与制版 (CTP)">
+                  <div class="mb-2" v-if="!isView"><el-button type="primary" plain icon="Plus" size="small" @click="addLine(pIndex, 'ctpList')">添加模具</el-button></div>
+                  <el-table :data="product.ctpList" border size="small" style="width: 100%;">
+                    <el-table-column label="部件" min-width="150"><template #default="scope"><el-input v-model="scope.row.partName" /></template></el-table-column>
+                    <el-table-column label="开数" width="120"><template #default="scope"><el-input-number v-model="scope.row.openNum" :min="1" :max="9" style="width: 100%" :controls="false" /></template></el-table-column>
+                    <el-table-column label="排版方式" width="150">
+                      <template #default="scope">
+                        <el-select v-model="scope.row.printType" allow-create filterable>
+                          <el-option label="单面" value="单面" /><el-option label="正反" value="正反" />
+                          <el-option label="自反" value="自反" /><el-option label="天地反" value="天地反" />
+                        </el-select>
+                      </template>
+                    </el-table-column>
+                    <el-table-column label="版数/套数" width="120"><template #default="scope"><el-input-number v-model="scope.row.plateCount" :min="1" style="width: 100%" :controls="false"/></template></el-table-column>
+                    <el-table-column label="操作" width="70" align="center" fixed="right" v-if="!isView"><template #default="scope"><el-button link type="danger" @click="removeLine(pIndex, 'ctpList', scope.$index)">移除</el-button></template></el-table-column>
+                  </el-table>
+                </el-tab-pane>
+
+              </el-tabs>
             </el-tab-pane>
           </el-tabs>
 
-          <el-row class="mt-4">
-             <el-col :span="24">
-              <el-form-item label="包装要求" prop="packRequirement">
-                <el-input v-model="form.packRequirement" type="textarea" :rows="2" placeholder="请输入包装要求" />
-              </el-form-item>
-            </el-col>
-            <el-col :span="24">
-              <el-form-item label="工单备注" prop="remark">
-                <el-input v-model="form.remark" type="textarea" :rows="2" placeholder="请输入备注" />
-              </el-form-item>
-            </el-col>
-          </el-row>
         </el-form>
       </div>
       <template #footer>
@@ -517,6 +505,7 @@
         </div>
       </template>
     </el-dialog>
+
     <el-dialog title="委外加工单预览与下载" v-model="printDialog.visible" width="1150px" append-to-body>
       <div id="printArea" class="print-wrapper" style="font-family: 'SimSun', 'Microsoft YaHei', sans-serif; color: #000;">
         <div class="print-page" v-for="(group, index) in printData.groups" :key="index" style="page-break-after: always; margin-bottom: 40px;">
@@ -539,7 +528,7 @@
                 <td colspan="6" style="text-align: left;"><strong>加工商地址：</strong>{{ group.supplierAddress || '详见系统记录' }}</td>
                 <td colspan="5" style="text-align: left;"><strong>委托方地址：</strong>中山市小榄镇西区社区太乐路23号5栋3楼</td>
                 <td colspan="1" style="background-color: #e8e8e8; font-weight: bold; text-align: center;">加工单号</td>
-                <td colspan="1" style="text-align: center; mso-number-format:'\@';">{{ printData.workOrderNo }}</td>
+                <td colspan="1" style="text-align: center; mso-number-format: '\@';">{{ printData.workOrderNo }}</td>
               </tr>
               
               <tr class="list-header" style="background-color: #e8e8e8; font-weight: bold; text-align: center;">
@@ -562,9 +551,7 @@
                 <td>{{ Number(i) + 1 }}</td>
                 <td>{{ item.productName }}</td>
                 <td>{{ item.materialName || item.paperName || '' }}</td>
-                
-                <td>{{ item.length && item.width ? item.length + '*' + item.width : (item.finishSize || '') }}</td>
-                
+                <td>{{ item.length && item.width ? `${item.length}*${item.width}${item.height ? '*' + item.height : ''}` : (item.finishSize || '') }}</td>
                 <td>{{ item.processQty || '' }}</td>
                 <td>张</td>
                 <td>{{ item.processProject }}</td>
@@ -578,7 +565,7 @@
 
               <tr class="total-row">
                 <td colspan="3" style="text-align: center; font-weight: bold;">合计 (人民币大写)</td>
-                <td colspan="5" style="text-align: center; font-weight: bold; font-size: 14px;">{{ digitUppercase(group.totalAmount) }}</td>
+                <td colspan="5" style="text-align: center; font-weight: bold; font-size: 14px;">{{ digitUppercase(Number(group.totalAmount)) }}</td>
                 <td colspan="2" style="text-align: center; font-weight: bold;">合计 (人民币小写)</td>
                 <td colspan="1" style="text-align: center; font-weight: bold; color: red;">{{ Number(group.totalAmount).toFixed(2) }}</td>
                 <td colspan="2"></td>
@@ -608,11 +595,142 @@
         </div>
       </template>
     </el-dialog>
+
+    <el-dialog title="工程单预览" v-model="fullPrintDialog.visible" width="1050px" append-to-body>
+      <div v-if="fullPrintDialog.loading" v-loading="fullPrintDialog.loading" style="min-height: 200px;"></div>
+      <div v-else-if="fullPrintData" style="font-family: 'SimSun', 'Microsoft YaHei', sans-serif; color: #000; font-size: 13px;">
+        <!-- 题头栏：二维码左 | 标题中 | 条形码右，在 fullPrintArea 外面 -->
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 2px solid #000;">
+          <div style="width:70px; flex-shrink:0;">
+            <img v-if="fullPrintQrcode" :src="fullPrintQrcode" style="width:65px; height:65px;" title="扫二维码" />
+          </div>
+          <div style="flex:1; text-align: center;">
+            <h2 style="margin: 0; font-size: 20px; font-weight: bold; letter-spacing: 3px;">{{ fullPrintData.companyName }}——工程单</h2>
+          </div>
+          <div style="width:auto; flex-shrink:0; text-align:right;">
+            <img v-if="fullPrintBarcode" :src="fullPrintBarcode" style="max-height:50px;" title="扫条形码" />
+          </div>
+        </div>
+        <div id="fullPrintArea">
+        <table border="1" cellspacing="0" cellpadding="4" class="full-print-table" style="width:100%; border-collapse:collapse; font-size:12px; border-color:#000; margin-bottom:10px;">
+          <colgroup><col width="10%"><col width="23%"><col width="10%"><col width="23%"><col width="10%"><col width="24%"></colgroup>
+          <tbody>
+          <tr>
+            <td class="fp-label">订单编号</td><td>{{ fullPrintData.orderNo || '' }}</td>
+            <td class="fp-label">客户名称</td><td>{{ fullPrintData.customerName || '' }}</td>
+            <td class="fp-label">工单号</td><td>{{ fullPrintData.workOrderNo || '' }}</td>
+          </tr>
+          <tr>
+            <td class="fp-label">产品编号</td><td>{{ fullPrintData.productNos || '' }}</td>
+            <td class="fp-label">品名</td><td>{{ fullPrintData.productNames || '' }}</td>
+            <td class="fp-label">交货日期</td><td>{{ parseTime(fullPrintData.deliveryDate, '{y}-{m}-{d}') || '' }}</td>
+          </tr>
+          <tr>
+            <td class="fp-label">数量</td><td colspan="3">{{ fullPrintData.quantities || '' }}</td>
+            <td class="fp-label">产品描述</td><td>{{ fullPrintData.productDesc || '' }}</td>
+          </tr>
+          </tbody>
+        </table>
+
+        <!-- 一、材质 -->
+        <div class="fp-section-title">一、材质</div>
+        <table border="1" cellspacing="0" cellpadding="4" class="full-print-table" style="width:100%; border-collapse:collapse; font-size:12px; border-color:#000; margin-bottom:10px;">
+          <colgroup><col width="8%"><col width="25%"><col width="20%"><col width="10%"><col></colgroup>
+          <tbody>
+          <tr class="fp-header-row"><td>版次</td><td>用料</td><td>开支尺寸mm</td><td>数量</td><td>备注</td></tr>
+          <tr v-for="(item, i) in (fullPrintData.materialList && fullPrintData.materialList.length ? fullPrintData.materialList : [{}])" :key="'m'+i">
+            <td style="text-align:center;">{{ item.edition || '' }}</td>
+            <td>{{ item.paperName || '' }}</td>
+            <td style="text-align:center;">{{ item.paperSize || '' }}</td>
+            <td style="text-align:center;">{{ item.requireQty || '' }}</td>
+            <td>{{ item.remark || '' }}</td>
+          </tr>
+          </tbody>
+        </table>
+
+        <!-- 二、印刷+表面处理 -->
+        <div class="fp-section-title">二、印刷+表面处理</div>
+        <table border="1" cellspacing="0" cellpadding="4" class="full-print-table" style="width:100%; border-collapse:collapse; font-size:12px; border-color:#000; margin-bottom:10px;">
+          <colgroup><col width="12%"><col width="12%"><col width="18%"><col width="10%"><col width="10%"><col width="10%"></colgroup>
+          <tbody>
+          <tr class="fp-header-row"><td>印刷机号</td><td>印刷颜色</td><td>印刷尺寸</td><td>模数</td><td>订单数</td><td>良品数</td></tr>
+          <tr v-for="(item, i) in (fullPrintData.printSurfaceList && fullPrintData.printSurfaceList.length ? fullPrintData.printSurfaceList : [{}])" :key="'ps'+i">
+            <td style="text-align:center;">{{ item.printMachine || '' }}</td>
+            <td style="text-align:center;">{{ item.printColor || '' }}</td>
+            <td style="text-align:center;">{{ formatSize(item) }}</td>
+            <td style="text-align:center;">{{ item.printImpression || '' }}</td>
+            <td style="text-align:center;">{{ item.processQty || '' }}</td>
+            <td style="text-align:center;">{{ item.goodQty || '' }}</td>
+          </tr>
+          </tbody>
+        </table>
+
+        <!-- 三、后续加工 -->
+        <div class="fp-section-title">三、后续加工</div>
+        <table border="1" cellspacing="0" cellpadding="4" class="full-print-table" style="width:100%; border-collapse:collapse; font-size:12px; border-color:#000; margin-bottom:10px;">
+          <colgroup><col width="18%"><col width="20%"><col width="18%"><col></colgroup>
+          <tbody>
+          <tr class="fp-header-row"><td>供应商</td><td>成品尺寸</td><td>项目内容</td><td>备注</td></tr>
+          <tr v-for="(item, i) in (fullPrintData.postProcessList && fullPrintData.postProcessList.length ? fullPrintData.postProcessList : [{}])" :key="'pp'+i">
+            <td style="text-align:center;">{{ getSupplierName(item.supplierId) }}</td>
+            <td style="text-align:center;">{{ formatSize(item) || item.finishSize || '' }}</td>
+            <td style="text-align:center;">{{ item.processProject || '' }}</td>
+            <td>{{ item.remark || '' }}</td>
+          </tr>
+          </tbody>
+        </table>
+
+        <!-- 四、其他订料 -->
+        <div class="fp-section-title">四、其他订料</div>
+        <table border="1" cellspacing="0" cellpadding="4" class="full-print-table" style="width:100%; border-collapse:collapse; font-size:12px; border-color:#000; margin-bottom:10px;">
+          <colgroup><col width="18%"><col width="22%"><col width="10%"><col></colgroup>
+          <tbody>
+          <tr class="fp-header-row"><td>项目</td><td>内容/规格</td><td>数量</td><td>备注</td></tr>
+          <tr v-for="(item, i) in (fullPrintData.extraPurchaseList && fullPrintData.extraPurchaseList.length ? fullPrintData.extraPurchaseList : [{}])" :key="'ep'+i">
+            <td>{{ item.itemContent || '' }}</td>
+            <td style="text-align:center;">{{ item.spec || '' }}</td>
+            <td style="text-align:center;">{{ item.quantity || '' }}</td>
+            <td>{{ item.remark || '' }}</td>
+          </tr>
+          </tbody>
+        </table>
+
+        <!-- 底部 -->
+        <table border="1" cellspacing="0" cellpadding="4" class="full-print-table" style="width:100%; border-collapse:collapse; font-size:12px; border-color:#000;">
+          <colgroup><col width="10%"><col width="40%"><col width="10%"><col width="40%"></colgroup>
+          <tbody>
+          <tr>
+            <td class="fp-label">包装要求</td><td>{{ fullPrintData.packRequirement || '' }}</td>
+            <td class="fp-label">物流要求</td><td>{{ fullPrintData.logisticsReq || '' }}</td>
+          </tr>
+          <tr>
+            <td class="fp-label">备注</td><td colspan="3">{{ fullPrintData.remark || '' }}</td>
+          </tr>
+          <tr>
+            <td class="fp-label">制单员</td><td>{{ fullPrintData.preparedBy || '' }}</td>
+            <td class="fp-label">审核</td><td>{{ fullPrintData.auditBy || '' }}</td>
+          </tr>
+          <tr>
+            <td class="fp-label">批准</td><td colspan="3">{{ fullPrintData.approvedBy || '' }}</td>
+          </tr>
+          </tbody>
+        </table>
+        </div>
+      </div>
+      <template #footer>
+        <div class="dialog-footer">
+          <el-button type="warning" icon="Download" @click="exportFullPrintExcel">下载 Excel</el-button>
+          <el-button type="success" icon="Printer" @click="doFullPrint">执 行 打 印</el-button>
+          <el-button @click="fullPrintDialog.visible = false">关 闭</el-button>
+        </div>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup name="WorkOrder" lang="ts">
-import { listWorkOrder, getWorkOrder, delWorkOrder, addWorkOrder, updateWorkOrder, auditWorkOrder } from '@/api/erp/workOrder';
+import { listWorkOrder, getWorkOrder, getPrintWorkOrder, delWorkOrder, addWorkOrder, updateWorkOrder, auditWorkOrder } from '@/api/erp/workOrder';
+import { listSalesOrder } from '@/api/erp/salesOrder/index';
 import { listCustomer } from '@/api/erp/customer';
 import { listInventory } from '@/api/erp/inventory'; 
 import { ComponentInternalInstance, computed, onMounted, reactive, ref, toRefs, watch, getCurrentInstance, nextTick } from 'vue';
@@ -621,23 +739,21 @@ import JsBarcode from 'jsbarcode';
 import QRCode from 'qrcode';
 import { getDicts } from '@/api/system/dict/data';
 import { useRoute } from 'vue-router';
-
+import { ElMessage } from 'element-plus';
 
 type ElFormInstance = InstanceType<typeof import('element-plus').ElForm>;
 
-interface DialogOption {
-  visible: boolean;
-  title: string;
-}
-
 const { proxy } = getCurrentInstance() as ComponentInternalInstance;
-const { 
-  erp_item_type, erp_process_name, erp_processor_category, 
-  erp_print_type, erp_print_color, erp_mold_name 
+const {
+  erp_item_type, erp_process_name, erp_processor_category,
+  erp_print_type, erp_print_color, erp_mold_name,
+  erp_process_detail, erp_pack_type, erp_logistics_type
 } = toRefs<any>(proxy?.useDict(
-  'erp_item_type', 'erp_process_name', 'erp_processor_category', 
-  'erp_print_type', 'erp_print_color', 'erp_mold_name'
+  'erp_item_type', 'erp_process_name', 'erp_processor_category',
+  'erp_print_type', 'erp_print_color', 'erp_mold_name',
+  'erp_process_detail', 'erp_pack_type', 'erp_logistics_type'
 ));
+
 const workOrderList = ref([]);
 const buttonLoading = ref(false);
 const loading = ref(true);
@@ -645,589 +761,216 @@ const showSearch = ref(true);
 const total = ref(0);
 const isView = ref(false);
 const isDataLoading = ref(false); 
-const rawProcessDictOptions = ref<any[]>([]); // 👈 用于存放未被阉割的工艺字典数据
+const rawProcessDictOptions = ref<any[]>([]);
+const rawProcessDetailOptions = ref<any[]>([]);
 const route = useRoute();
-const activeTab = ref('materialList');
 
+const activeProductTab = ref<string>('0');
 const customerOptions = ref<any[]>([]); 
 const inventoryOptions = ref<any[]>([]);
 const rawInventoryList = ref<any[]>([]);
 
 const queryFormRef = ref<ElFormInstance>();
 const workOrderFormRef = ref<ElFormInstance>();
-const dialog = reactive<DialogOption>({ visible: false, title: '' });
+const dialog = reactive({ visible: false, title: '' });
 
 const auditDialog = reactive({ visible: false });
-const auditForm = ref({ id: undefined, auditStatus: '2' });
+const auditForm = ref<any>({ id: undefined, auditStatus: '2' });
 
-const ticketDialog = reactive({
-  visible: false,
-  masterOrderNo: '',
-  fullOrderData: {} as any,
-  productList: [] as any[]
-});
+const fetchSoDialog = reactive({ visible: false, loading: false, list: [] as any[], total: 0, pageNum: 1, pageSize: 10 });
+const printDialog = reactive({ visible: false });
+const printData = ref({ workOrderNo: '', orderDate: '', groups: [] as any[] });
 
-const printMaterialRef = ref<any>();
-const printPrintRef = ref<any>();
-const printProcessRef = ref<any>();
-const printCtpRef = ref<any>();
-const rawMoldDictOptions = ref<any[]>([]);
-
-const printConfig = reactive({
-  visible: false,
-  currentIndex: 0,
-  subOrderNo: '',
-  currentProduct: {} as any,
-  sourceData: { materialList: [], printList: [], processList: [], ctpList: [] },
-  selectedMaterials: [] as any[],
-  selectedPrints: [] as any[],
-  selectedProcesses: [] as any[],
-  selectedCtps: [] as any[]
-});
-
+const fullPrintDialog = reactive({ visible: false, loading: false });
+const fullPrintData = ref<any>({});
+const fullPrintBarcode = ref('');
+const fullPrintQrcode = ref('');
 const initFormData: any = {
-  id: undefined, 
-  customerId: undefined, 
-  customerName: undefined,
-  productName: undefined, 
-  deliveryDate: undefined,
-  packRequirement: undefined, 
-  remark: undefined,
-  productList: [],   
-  materialList: [], 
-  ctpList: [], 
-  processList: [], 
-  outsourcingList: [], 
-  printList: [],
-  extraPurchaseList: [] 
+  id: undefined, salesOrderId: undefined, customerId: undefined, customerName: undefined,
+  deliveryDate: undefined, packRequirement: undefined, remark: undefined, preparedBy: undefined,
+  productList: []
 };
 
 const data = reactive<any>({
   form: { ...initFormData },
-  queryParams: { pageNum: 1, pageSize: 10, workOrderNo: '', customerName: '', productName: '' },
+  queryParams: { pageNum: 1, pageSize: 50, workOrderNo: '', customerName: '', productName: '' },
   rules: {
     customerId: [{ required: true, message: "客户必须选择", trigger: "change" }]
   }
 });
 const { queryParams, form, rules } = toRefs(data);
 
-// ==========================
-// 针对免回车输入的优化处理方法
-// ==========================
-const handleSelectBlur = (e: any, row: any, field: string) => {
-  // 设置一个极短的延迟，防止覆盖下拉列表中正常点选时的值触发
-  setTimeout(() => {
-    const val = e.target.value;
-    if (val && row[field] !== val) {
-      row[field] = val;
-      // 如果是物料名称，同时触发联动的查询逻辑
-      if (field === 'paperName') {
-        handleMaterialChange(val, row);
-      }
-    }
-  }, 100);
-};
-
-const getCustomerList = async () => {
-  const res = await listCustomer({ pageNum: 1, pageSize: 1000 } as any);
-  customerOptions.value = res.rows;
-};
-
-const loadInventoryData = async () => {
-  try {
-    const res = await listInventory({ pageNum: 1, pageSize: 2000 } as any);
-    const list = res.rows || [];
-    rawInventoryList.value = list; 
-    
-    const groups: Record<string, any[]> = {};
-    list.forEach((item: any) => {
-      const dictItem = erp_item_type.value?.find((d: any) => String(d.value) === String(item.itemType) || String(d.label) === String(item.itemType));
-      const typeLabel = dictItem ? dictItem.label : (item.itemType || '其他');
-      
-      if (!groups[typeLabel]) {
-        groups[typeLabel] = [];
-      }
-      if (!groups[typeLabel].find(i => i.itemName === item.itemName && i.spec === item.spec)) {
-        groups[typeLabel].push(item);
-      }
-    });
-
-    inventoryOptions.value = Object.keys(groups).map(key => {
-      return { label: key, options: groups[key] };
-    });
-  } catch (e) {
-    console.error("加载库存数据失败", e);
-  }
-};
-
-const handleMaterialChange = (val: string, row: any) => {
-  if (row.sourceType === '本厂') {
-    const found = rawInventoryList.value.find(i => i.itemName === val);
-    if (found) {
-      row.paperSize = found.spec; 
-      if (row.requireQty && row.requireQty > Number(found.currentQty)) {
-        proxy?.$modal.msgWarning(`注意：当前【${val}】库存仅剩 ${found.currentQty}！`);
-      }
-    }
-  } else {
-    const found = rawInventoryList.value.find(i => i.itemName === val);
-    if (found && !row.paperSize) {
-      row.paperSize = found.spec;
-    }
-  }
-};
-
-const checkMaterialQty = (val: number, row: any) => {
-  if (row.sourceType === '本厂' && row.paperName) {
-    const found = rawInventoryList.value.find(i => i.itemName === row.paperName);
-    if (found) {
-      const maxQty = Number(found.currentQty || 0);
-
-      const totalRequested = form.value.materialList
-        .filter((m: any) => m.sourceType === '本厂' && m.paperName === row.paperName)
-        .reduce((sum: number, m: any) => sum + Number(m.requireQty || 0), 0);
-
-      if (totalRequested > maxQty) {
-        proxy?.$modal.msgError(`库存不足预警！【${row.paperName}】当前总库存为 ${maxQty}，但列表中累计需求已达 ${totalRequested}！`);
-        const safeVal = Math.max(0, maxQty - (totalRequested - Number(val)));
-        row.requireQty = safeVal;
-      }
-    }
-  }
-};
-
-const handleCustomerChange = (val: any) => {
-  const selected = customerOptions.value.find(item => String(item.id) === String(val));
-  if (selected) form.value.customerName = selected.companyName;
-};
-
-const calcProductTotal = (row: any) => {
-  const pq = Number(row.produceQuantity || 0);
-  const up = Number(row.unitPrice || 0);
-  if (pq && up) {
-    row.totalAmount = Number((pq * up).toFixed(2));
-  } else {
-    row.totalAmount = 0.00;
-  }
-};
-
-const handleOrderQtyChange = (val: number, row: any) => {
-  if (val && !row.produceQuantity) {
-    row.produceQuantity = val;
-    calcProductTotal(row);
-  }
-};
-
-const totalOrderQty = computed(() => {
-  if (!form.value.productList) return 0;
-  return form.value.productList.reduce((sum: number, item: any) => sum + Number(item.orderQuantity || 0), 0);
-});
-
-const totalProduceQty = computed(() => {
-  if (!form.value.productList) return 0;
-  return form.value.productList.reduce((sum: number, item: any) => sum + Number(item.produceQuantity || 0), 0);
-});
-
-const combinedProductNames = computed(() => {
-  if (!form.value.productList) return '';
-  return form.value.productList.map((p: any) => p.productName).filter(Boolean).join(',');
-});
-
-const parseSize = (sizeStr: string, type: 'L' | 'W') => {
-  if (!sizeStr) return 0;
-  const parts = sizeStr.toLowerCase().split(/[x*×]/);
-  if (parts.length >= 2) return type === 'L' ? parseFloat(parts[0]) : parseFloat(parts[1]);
-  return 0;
-};
-
-const calcTotalPrice = (row: any) => {
-  const up = Number(row.unitPrice || 0);
-  const gq = Number(row.processQty || 0);
-  if (!up || !gq) { row.totalPrice = 0; return; }
-  
-  if (row.unit === '平方米' && row.length && row.width) {
-    const l = Number(row.length);
-    const w = Number(row.width);
-    row.totalPrice = Number(((l * w / 1000000) * gq * up).toFixed(2));
-  } else {
-    row.totalPrice = Number((gq * up).toFixed(2));
-  }
-};
-
-const getFilteredSuppliers = (processProject: string | undefined | null) => {
-  const toArray = (val: any): string[] => {
-    if (!val) return [];
-    return Array.isArray(val) ? val.map(String) : String(val).split(',');
+const createNewProduct = () => {
+  return {
+    uid: Date.now().toString() + Math.random().toString().substring(2, 6),
+    productName: '', customerPo: '', customerMaterialNo: '', spec: '',
+    knifePlateNo: '', orderQuantity: undefined, produceQuantity: undefined, unit: '个', unitPrice: undefined, totalAmount: 0.00,
+    deliveryDate: undefined,
+    packRequirement: '', logisticsReq: '',
+    materialList: [], processList: [], outsourcingList: [], ctpList: [], extraPurchaseList: []
   };
+};
 
-  const options: any[] = customerOptions.value || [];
-
-  // 1. 如果没有选择工序，展示所有【供应商(2)】和【加工商(3)】
-  if (!processProject) {
-    return options.filter((c: any) => {
-      const types = toArray(c.customerType);
-      return types.includes('2') || types.includes('3');
-    });
-  }
-
-  // 2. 💡 重点修改：去【未阉割的完整字典列表】中查找，匹配原生的 dictLabel 字段
-  const dictItem = rawProcessDictOptions.value.find((d: any) => d.dictLabel === processProject || d.dictValue === processProject);
-
-  // 提取备注里的分类ID（加个 trim 防止你配置字典时不小心多敲了空格）
-  const targetCatId = dictItem?.remark?.trim(); 
-
-  // 3. 智能兜底：如果这个工艺在字典里没有配置备注(分类)，直接放开所有供选择！
-  if (!targetCatId) {
-    return options.filter((c: any) => {
-      const types = toArray(c.customerType);
-      return types.includes('2') || types.includes('3');
-    });
-  }
-
-  // 4. 精准匹配逻辑
-  return options.filter((c: any) => {
-    const types = toArray(c.customerType);
-    let matchSupplier = false;
-    let matchProcessor = false;
-
-    // 校验 A：作为供应商 (2) 时，看他的供应商类型是否匹配
-    if (types.includes('2')) {
-      const supCats = toArray(c.supplierCategory || c.supplierType);
-      matchSupplier = supCats.includes(targetCatId);
+const handleProductTabsEdit = (targetName: any, action: any) => {
+  if (action === 'add') {
+    const newProd = createNewProduct();
+    form.value.productList.push(newProd);
+    activeProductTab.value = newProd.uid;
+  } else if (action === 'remove') {
+    if (form.value.productList.length <= 1) {
+       ElMessage.warning("工单至少需要保留一个产品！");
+       return;
     }
-
-    // 校验 B：作为加工商 (3) 时，看他的加工商类型是否匹配
-    if (types.includes('3')) {
-      const procCats = toArray(c.processorCategory || c.processorType);
-      matchProcessor = procCats.includes(targetCatId);
-    }
-
-    return matchSupplier || matchProcessor;
-  });
+    form.value.productList = form.value.productList.filter((p: any) => p.uid !== targetName);
+    activeProductTab.value = form.value.productList[0].uid;
+  }
 };
 
-watch(() => totalOrderQty.value, (newVal) => {
-  if (isDataLoading.value) return; 
-  if (!newVal || Number(newVal) === 0) return;
-  if (form.value.materialList.length === 0) {
-    const valNum = Number(newVal);
-    let extraFace = Math.floor((valNum - 1) / 66);
-    let faceQty = valNum + 101 + extraFace;
-    let extraPit = Math.floor((valNum - 1) / 100);
-    let pitQty = valNum + 1 + extraPit;
-
-    form.value.materialList.push({ partName: '面纸', sourceType: '自来', requireQty: faceQty });
-    form.value.materialList.push({ partName: '坑纸', sourceType: '自来', requireQty: pitQty });
-  }
-});
-
-const handleToOutsourcing = (processRow: any) => {
-  if (!processRow.processName) {
-    proxy?.$modal.msgWarning("请先选择或输入工序名称！");
-    return;
-  }
-  const exists = form.value.outsourcingList.find((item: any) => item.processProject === processRow.processName);
-  if (exists) { proxy?.$modal.msgWarning(`【${processRow.processName}】已转过委外！`); return; }
-
-  const firstMat = form.value.materialList.length > 0 ? form.value.materialList[0] : null;
-  
-  form.value.outsourcingList.push({
-    productName: combinedProductNames.value, 
-    materialName: firstMat ? (firstMat.paperName || '') : '',
-    length: firstMat ? parseSize(firstMat.paperSize, 'L') : 0,
-    width: firstMat ? parseSize(firstMat.paperSize, 'W') : 0,
-    processQty: totalProduceQty.value, 
-    processProject: processRow.processName,
-    unit: '平方米', 
-    unitPrice: undefined,
-    totalPrice: 0,
-    remark: processRow.remark
-  });
-  proxy?.$modal.msgSuccess(`转委外成功！已自动填入委外加工单，请去分配加工商。`);
-};
-
-
-
-const handleToExtraPurchase = (row: any) => {
-  if (!row.paperName) {
-    proxy?.$modal.msgWarning("请先选择或输入物料名称！");
-    return;
-  }
-  
-  const combinedContent = `${row.partName || '材料'} - ${row.paperName}`;
-  const exists = form.value.extraPurchaseList.find((item: any) => item.itemContent === combinedContent && item.spec === row.paperSize);
-  
-  if (exists) {
-    proxy?.$modal.msgWarning(`【${combinedContent}】已在其它订料列表中！`);
-    return;
-  }
-
-  form.value.extraPurchaseList.push({
-    itemContent: combinedContent,
-    spec: row.paperSize || '',
-    quantity: row.requireQty || 1,
-    remark: '由材料清单转入生成'
-  });
-
-  nextTick(() => {
-    activeTab.value = 'extraPurchaseList'; 
-    proxy?.$modal.msgSuccess("已成功转入其它订料！");
-  });
-};
-
-// ==========================
-// 添加产品明细核心：生成自动刀版号
-// ==========================
 const addProductLine = () => {
-  form.value.productList.push({
-    productName: '', customerPo: '', customerMaterialNo: '', spec: '', layers: '', 
-    knifePlateNo: '', // 👈 这里改成空字符串，让后端 Redis 自动接管
-    orderQuantity: undefined, produceQuantity: undefined, unit: '个', unitPrice: undefined, totalAmount: 0.00,
-    deliveryDate: undefined 
-  });
+  const newProd = createNewProduct();
+  form.value.productList.push(newProd);
+  activeProductTab.value = newProd.uid;
 };
 
-// ==========================
-// 动态构建工艺树 & 批量选择逻辑
-// ==========================
-
-// 💡 核心：自动将扁平的数据字典，根据备注关联组装成多级下拉树
-const processTreeData = computed(() => {
-  const tree: any[] = [];
-  const categories = erp_processor_category.value || [];
-  const processes = rawProcessDictOptions.value || [];
-
-  // 1. 遍历加工商的分类，作为树的【父节点】
-  categories.forEach((cat: any) => {
-    const parentNode = {
-      value: cat.label, 
-      label: cat.label,
-      children: [] as any[]
-    };
-    
-    // 2. 找到所有备注(remark)等于分类ID的工艺，放入该父节点下
-    processes.forEach((proc: any) => {
-      if (proc.remark && proc.remark.trim() === String(cat.value)) {
-        parentNode.children.push({
-          value: proc.dictLabel, // 叶子节点的值存中文名称
-          label: proc.dictLabel
-        });
-      }
-    });
-    
-    // 只有下面有子工艺的分类才会显示出来
-    if (parentNode.children.length > 0) {
-      tree.push(parentNode);
-    }
-  });
-
-  // 3. 兜底保护：把没配置备注的工艺，自动收拢到“其他未分类”下
-  const unclassifiedNode = {
-    value: '其他未分类',
-    label: '其他工艺(未配置关联)',
-    children: [] as any[]
-  };
-  processes.forEach((proc: any) => {
-    if (!proc.remark || !categories.find((c: any) => String(c.value) === proc.remark.trim())) {
-      unclassifiedNode.children.push({
-        value: proc.dictLabel,
-        label: proc.dictLabel
-      });
-    }
-  });
-
-  if (unclassifiedNode.children.length > 0) {
-    tree.push(unclassifiedNode);
-  }
-
-  return tree;
-});
-
-// 绑定的多选数组 (因为配置了 emitPath: false，这里存的只会是叶子节点的值，如 ['过哑胶', '烫金'])
-const batchProcessSelection = ref<string[]>([]);
-
-// 确认批量添加至表格
-const confirmBatchAddProcess = () => {
-  if (!batchProcessSelection.value || batchProcessSelection.value.length === 0) {
-    proxy?.$modal.msgWarning("请先展开级联菜单并勾选至少一项工艺！");
-    return;
-  }
-
-  let addedCount = 0;
-  if (!form.value.processList) {
-    form.value.processList = [];
-  }
-
-  batchProcessSelection.value.forEach(processName => {
-    // 查重：已经在列表里的工艺不再重复添加
-    const exists = form.value.processList.find((p: any) => p.processName === processName);
-    
-    if (!exists) {
-      form.value.processList.push({
-        processName: processName,
-        remark: '' 
-      });
-      addedCount++;
-    }
-  });
-
-  if (addedCount > 0) {
-    proxy?.$modal.msgSuccess(`成功批量生成 ${addedCount} 项工艺明细！`);
-  } else {
-    proxy?.$modal.msgWarning("您勾选的工艺已全部存在于明细中，未重复添加。");
-  }
-
-  // 添加完成后自动清空输入框，保持界面清爽
-  batchProcessSelection.value = []; 
+// TS 放宽，防止 $index 类型推断报错
+const addLine = (pIndex: any, listName: string) => { 
+    form.value.productList[pIndex][listName].push({}); 
+};
+const removeLine = (pIndex: any, listName: string, index: any) => { 
+    form.value.productList[pIndex][listName].splice(index, 1); 
 };
 
-const addLine = (listName: string) => { form.value[listName].push({}); };
-const removeLine = (listName: string, index: number) => { form.value[listName].splice(index, 1); };
-
-const getList = async () => {
-  loading.value = true;
-  const res = await listWorkOrder(queryParams.value);
-  workOrderList.value = res.rows;
-  total.value = res.total;
-  loading.value = false;
+const openSalesOrderList = () => { fetchSoDialog.visible = true; fetchPendingSalesOrders(); };
+const fetchPendingSalesOrders = async () => {
+  fetchSoDialog.loading = true;
+  try {
+    const res = await listSalesOrder({ pageNum: fetchSoDialog.pageNum, pageSize: fetchSoDialog.pageSize, status: 0 });
+    fetchSoDialog.list = res.rows; fetchSoDialog.total = res.total;
+  } catch (e) { console.error(e); } finally { fetchSoDialog.loading = false; }
 };
-const cancel = () => { form.value = JSON.parse(JSON.stringify(initFormData)); dialog.visible = false; activeTab.value = 'materialList'; };
-const handleQuery = () => { queryParams.value.pageNum = 1; getList(); };
-const resetQuery = () => { queryFormRef.value?.resetFields(); handleQuery(); };
 
-const handleAdd = () => {
+const initWorkOrderWhole = (soMaster: any) => {
+  fetchSoDialog.visible = false;
   isView.value = false;
-  activeTab.value = 'materialList'; 
   form.value = JSON.parse(JSON.stringify(initFormData));
-  addProductLine();
+  
+  form.value.salesOrderId = soMaster.id;
+  form.value.customerId = String(soMaster.customerId);
+  form.value.customerName = soMaster.customerName;
+  if(soMaster.deliveryDate) form.value.deliveryDate = String(soMaster.deliveryDate).split(' ')[0].split('T')[0];
+  
+  const details = soMaster.detailList || [];
+  if (details.length === 0) {
+      addProductLine();
+      proxy?.$modal.msgWarning("该订单无产品明细，已开启空白工单");
+  } else {
+      details.forEach((soDetail: any) => {
+          const newProd = createNewProduct();
+          newProd.productName = soDetail.productName;
+          newProd.customerPo = soMaster.customerPo;
+          newProd.customerMaterialNo = soDetail.customerMaterialNo;
+          newProd.spec = soDetail.spec;
+          newProd.orderQuantity = soDetail.quantity;
+          newProd.produceQuantity = soDetail.quantity;
+          newProd.deliveryDate = form.value.deliveryDate;
+          newProd.packRequirement = soDetail.packReq || '';
+          newProd.logisticsReq = soDetail.logisticsReq || '';
+
+          if (soDetail.printReq) newProd.processList.push({ processName: soDetail.printReq, processDetail: '', remark: '[销售印刷要求]' });
+          if (soDetail.craftReq) {
+              const crafts = soDetail.craftReq.split(',').filter(Boolean);
+              crafts.forEach((c: string) => newProd.processList.push({ processName: c, processDetail: '', remark: '[销售工艺要求]' }));
+          }
+          form.value.productList.push(newProd);
+      });
+      activeProductTab.value = form.value.productList[0].uid;
+      proxy?.$modal.msgSuccess(`成功提取 ${details.length} 个产品！`);
+  }
+  dialog.title = "提取并新增多产品生产单";
   dialog.visible = true; 
-  dialog.title = "新建生产总单";
 };
 
 const loadFormData = async (id: number) => {
   isDataLoading.value = true; 
-  activeTab.value = 'materialList'; 
   try {
     const res = await getWorkOrder(id);
     const woData = res.data as any; 
     
-    form.value = { ...initFormData, ...woData };
+    form.value.id = woData.id;
+    form.value.workOrderNo = woData.workOrderNo;
+    form.value.customerId = String(woData.customerId);
+    form.value.customerName = woData.customerName;
+    form.value.deliveryDate = woData.deliveryDate;
+    form.value.remark = woData.remark;
+    form.value.packRequirement = woData.packRequirement;
 
-    if (form.value.customerId) {
-      form.value.customerId = String(form.value.customerId);
-    }
-    
-    form.value.productList = woData.productList || woData.bizWoProductList || [];
-    form.value.materialList = woData.materialList || woData.bizWoMaterialList || [];
-    form.value.ctpList = woData.ctpList || woData.bizWoCtpList || [];
-    form.value.printList = woData.printList || woData.bizWoPrintList || [];
-    form.value.processList = woData.processList || woData.bizWoProcessList || [];
-    form.value.outsourcingList = woData.outsourcingList || woData.bizWoOutsourcingList || [];
-    form.value.extraPurchaseList = woData.extraPurchaseList || woData.bizWoExtraPurchaseList || []; 
-    
-    if(form.value.outsourcingList && form.value.outsourcingList.length > 0){
-        form.value.outsourcingList.forEach((item: any) => {
-           if (item.supplierId) item.supplierId = String(item.supplierId);
-           if (item.finishSize) {
-               const parts = item.finishSize.split('*');
-               item.length = Number(parts[0] || 0);
-               item.width = Number(parts[1] || 0);
-           }
-        });
-    }
-  } finally {
-    nextTick(() => {
-      isDataLoading.value = false;
+    const flatProducts = woData.productList || woData.bizWoProductList || [];
+    const flatMaterials = woData.materialList || woData.bizWoMaterialList || [];
+    const flatProcesses = woData.processList || woData.bizWoProcessList || [];
+    const flatOutsourcings = woData.outsourcingList || woData.bizWoOutsourcingList || [];
+    const flatCtps = woData.ctpList || woData.bizWoCtpList || [];
+    const flatExtras = woData.extraPurchaseList || woData.bizWoExtraPurchaseList || [];
+
+    const nestedProducts: any[] = [];
+    flatProducts.forEach((p: any) => {
+       const newP = createNewProduct();
+       Object.assign(newP, p);
+       newP.materialList = flatMaterials.filter((m: any) => m.productName === p.productName);
+       newP.processList = flatProcesses.filter((m: any) => m.productName === p.productName);
+       newP.outsourcingList = flatOutsourcings.filter((m: any) => m.productName === p.productName);
+       newP.ctpList = flatCtps.filter((m: any) => m.productName === p.productName);
+       newP.extraPurchaseList = flatExtras.filter((m: any) => m.productName === p.productName);
+       nestedProducts.push(newP);
     });
+
+    if (nestedProducts.length === 0) nestedProducts.push(createNewProduct());
+    form.value.productList = nestedProducts;
+    activeProductTab.value = nestedProducts[0].uid;
+    
+  } finally {
+    nextTick(() => { isDataLoading.value = false; });
   }
 }
-
-const handleUpdate = async (row?: any) => {
-  isView.value = false;
-  await loadFormData(row.id);
-  dialog.visible = true; 
-  dialog.title = "修改生产总单";
-};
-
-const handleView = async (row: any) => {
-  isView.value = true; 
-  await loadFormData(row.id);
-  dialog.visible = true; 
-  dialog.title = "查看生产总单 - " + row.workOrderNo;
-};
-
-const handleAudit = (row: any) => {
-  auditForm.value = { id: row.id, auditStatus: '2' };
-  auditDialog.visible = true;
-};
-
-const submitAudit = async () => {
-  await auditWorkOrder(auditForm.value);
-  proxy?.$modal.msgSuccess("审批操作成功");
-  auditDialog.visible = false;
-  getList(); 
-};
-
-const handleExportList = () => {
-  proxy?.download('erp/workOrder/export', { ...queryParams.value }, `工单列表_${new Date().getTime()}.xlsx`)
-};
 
 const submitForm = () => {
   workOrderFormRef.value?.validate(async (valid: boolean) => {
     if (valid) {
-      let materialValid = true;
-      const currentMaterials = form.value.materialList || [];
-      for (let i = 0; i < currentMaterials.length; i++) {
-        const item = currentMaterials[i];
-        if (item.paperName && !item.partName) {
-          proxy?.$modal.msgError(`保存失败：材料清单第 ${i + 1} 行，请选择或输入【部件】名称！`);
-          materialValid = false;
-          break;
-        }
-        if (item.partName && !item.paperName) {
-          proxy?.$modal.msgError(`保存失败：材料清单第 ${i + 1} 行，请选择【物料名称】！`);
-          materialValid = false;
-          break;
-        }
-      }
-      if (!materialValid) return; 
-
-      form.value.productList = (form.value.productList || []).filter((item: any) => item.productName);
-      form.value.materialList = (form.value.materialList || []).filter((item: any) => item.partName || item.paperName);
-      form.value.ctpList = (form.value.ctpList || []).filter((item: any) => item.partName);
-      form.value.printList = (form.value.printList || []).filter((item: any) => item.machineNo || item.printColor);
-      form.value.processList = (form.value.processList || []).filter((item: any) => item.processName);
-      form.value.outsourcingList = (form.value.outsourcingList || []).filter((item: any) => item.processProject);
-      form.value.extraPurchaseList = (form.value.extraPurchaseList || []).filter((item: any) => item.itemContent);
-
-      if (!form.value.productList || form.value.productList.length === 0) {
-        proxy?.$modal.msgError("请至少添加一项有效的产品明细");
-        return;
-      }
-
-      form.value.outsourcingList.forEach((item: any) => {
-         item.finishSize = `${item.length || 0}*${item.width || 0}`;
-      });
-
-      const inHouseMats = form.value.materialList.filter((m: any) => m.sourceType === '本厂' && m.paperName);
-      const matSum: Record<string, number> = {};
-      for (const m of inHouseMats) {
-        matSum[m.paperName] = (matSum[m.paperName] || 0) + Number(m.requireQty || 0);
-      }
-      for (const [name, qty] of Object.entries(matSum)) {
-        const found = rawInventoryList.value.find(i => i.itemName === name);
-        const maxQty = found ? Number(found.currentQty || 0) : 0;
-        if (qty > maxQty) {
-          proxy?.$modal.msgError(`保存失败：本厂材料【${name}】的全局总需求（${qty}）已超过可用库存（${maxQty}）！`);
-          return;
-        }
-      }
-
       buttonLoading.value = true;
-      form.value.productName = combinedProductNames.value;
+      const submitData = JSON.parse(JSON.stringify(form.value));
+      
+      const flatMats: any[] = [];
+      const flatProcs: any[] = [];
+      const flatOuts: any[] = [];
+      const flatCtps: any[] = [];
+      const flatExtras: any[] = [];
+      const productNames: string[] = [];
 
-      if (form.value.id) await updateWorkOrder(form.value).finally(() => buttonLoading.value = false);
-      else await addWorkOrder(form.value).finally(() => buttonLoading.value = false);
+      for (const prod of submitData.productList) {
+          if (!prod.productName) continue;
+          productNames.push(prod.productName);
+          
+          prod.materialList.forEach((m: any) => { m.productName = prod.productName; flatMats.push(m); });
+          prod.processList.forEach((m: any) => { m.productName = prod.productName; flatProcs.push(m); });
+          prod.outsourcingList.forEach((m: any) => { m.productName = prod.productName; flatOuts.push(m); });
+          prod.ctpList.forEach((m: any) => { m.productName = prod.productName; flatCtps.push(m); });
+          prod.extraPurchaseList.forEach((m: any) => { m.productName = prod.productName; flatExtras.push(m); });
+      }
+
+      if (productNames.length === 0) {
+          proxy?.$modal.msgError("请至少填写一个产品的名称！");
+          buttonLoading.value = false;
+          return;
+      }
+
+      submitData.productName = productNames.join(','); 
+      submitData.materialList = flatMats;
+      submitData.processList = flatProcs;
+      submitData.outsourcingList = flatOuts;
+      submitData.ctpList = flatCtps;
+      submitData.extraPurchaseList = flatExtras;
+
+      if (submitData.id) await updateWorkOrder(submitData).finally(() => buttonLoading.value = false);
+      else await addWorkOrder(submitData).finally(() => buttonLoading.value = false);
       
       proxy?.$modal.msgSuccess("保存成功");
       dialog.visible = false;
@@ -1236,468 +979,502 @@ const submitForm = () => {
   });
 };
 
-const handleDelete = async (row?: any) => {
-  await proxy?.$modal.confirm('确认删除工单【' + row.workOrderNo + '】？');
-  await delWorkOrder(row.id);
-  proxy?.$modal.msgSuccess("删除成功");
-  await getList();
+const handleBatchToOutsourcing = (pIndex: any) => {
+    const product = form.value.productList[pIndex];
+    if (!product.processList || product.processList.length === 0) {
+        proxy?.$modal.msgWarning("当前没有工序可以转委外！");
+        return;
+    }
+    let transferCount = 0;
+    const firstMat = product.materialList.length > 0 ? product.materialList[0] : null;
+
+    product.processList.forEach((proc: any) => {
+        if (!proc.processName) return;
+        const exists = product.outsourcingList.find((item: any) => item.processProject === proc.processName);
+        if (!exists) {
+            product.outsourcingList.push({
+                productName: product.productName,
+                materialName: firstMat ? (firstMat.paperName || '') : '',
+                length: firstMat ? parseSize(firstMat.paperSize, 'L') : undefined,
+                width: firstMat ? parseSize(firstMat.paperSize, 'W') : undefined,
+                height: undefined,
+                processQty: product.produceQuantity,
+                processProject: proc.processName,
+                processDetail: proc.processDetail || '',
+                unit: '平方米',
+                unitPrice: undefined,
+                totalPrice: 0,
+                remark: proc.remark
+            });
+            transferCount++;
+        }
+    });
+
+    if (transferCount > 0) {
+        proxy?.$modal.msgSuccess(`神级按钮触发成功！已将 ${transferCount} 条工序全部批量转入委外！`);
+    } else {
+        proxy?.$modal.msgWarning("当前工序均已转过委外。");
+    }
 };
 
-const handlePrintTicket = async (row: any) => {
-  const res = await getWorkOrder(row.id);
-  const woDetail = res.data as any;
-  ticketDialog.masterOrderNo = woDetail.workOrderNo;
-  ticketDialog.fullOrderData = woDetail;
-  ticketDialog.productList = woDetail.productList || woDetail.bizWoProductList || [];
-  
-  if (ticketDialog.productList.length === 0) {
-    proxy?.$modal.msgWarning("该工单下没有产品明细，无法生成流转单！");
-    return;
+const handleToOutsourcing = (pIndex: any, processRow: any) => {
+  const product = form.value.productList[pIndex];
+  if (!processRow.processName) { proxy?.$modal.msgWarning("请先填写名称！"); return; }
+  const exists = product.outsourcingList.find((item: any) => item.processProject === processRow.processName);
+  if (exists) { proxy?.$modal.msgWarning(`【${processRow.processName}】已转过委外！`); return; }
+
+  const firstMat = product.materialList.length > 0 ? product.materialList[0] : null;
+  product.outsourcingList.push({
+    productName: product.productName,
+    materialName: firstMat ? (firstMat.paperName || '') : '',
+    length: firstMat ? parseSize(firstMat.paperSize, 'L') : undefined,
+    width: firstMat ? parseSize(firstMat.paperSize, 'W') : undefined,
+    height: undefined,
+    processQty: product.produceQuantity,
+    processProject: processRow.processName,
+    processDetail: processRow.processDetail || '',
+    unit: '平方米',
+    unitPrice: undefined,
+    totalPrice: 0,
+    remark: processRow.remark
+  });
+  proxy?.$modal.msgSuccess(`单条转委外成功！`);
+};
+
+const handleToExtraPurchase = (row: any) => {
+  if (!row.paperName) { proxy?.$modal.msgWarning("请先选择或输入物料！"); return; }
+  const combinedContent = `${row.partName || '材料'} - ${row.paperName}`;
+  const exists = form.value.extraPurchaseList?.find((item: any) => item.itemContent === combinedContent && item.spec === row.paperSize);
+  if (exists) { proxy?.$modal.msgWarning(`已存在于其它订料！`); return; }
+
+  form.value.extraPurchaseList?.push({ itemContent: combinedContent, spec: row.paperSize || '', quantity: row.requireQty || 1, remark: '转入生成' });
+  proxy?.$modal.msgSuccess("已成功转入其它订料！");
+};
+
+// 💡 修复：全方位保护数值运算的闭包
+const calcTotalPrice = (row: any) => {
+  const up = Number(row.unitPrice || 0); 
+  const gq = Number(row.processQty || 0);
+  if (!up || !gq) { row.totalPrice = 0; return; }
+  if (row.unit === '平方米' && row.length && row.width) {
+    const lNum = Number(row.length || 0); 
+    const wNum = Number(row.width || 0);
+    row.totalPrice = Number(((lNum * wNum / 1000000) * gq * up).toFixed(2));
+  } else {
+    row.totalPrice = Number((gq * up).toFixed(2));
   }
-  ticketDialog.visible = true;
 };
 
-const openPrintConfig = (product: any, index: number) => {
-  const wo = ticketDialog.fullOrderData;
-  printConfig.currentIndex = index; 
-  printConfig.subOrderNo = `${ticketDialog.masterOrderNo}-${String(index + 1).padStart(2, '0')}`;
-  printConfig.currentProduct = product;
-  
-  printConfig.sourceData.materialList = wo.materialList || wo.bizWoMaterialList || [];
-  printConfig.sourceData.printList = wo.printList || wo.bizWoPrintList || [];
-  printConfig.sourceData.processList = wo.processList || wo.bizWoProcessList || [];
-  printConfig.sourceData.ctpList = wo.ctpList || wo.bizWoCtpList || [];
-  
-  printConfig.visible = true;
+const handleOrderQtyChange = (val: any, row: any) => {
+  if (val && !row.produceQuantity) { row.produceQuantity = val; calcProductTotal(row); }
+};
 
-  nextTick(() => {
-    printConfig.sourceData.materialList.forEach((row: any) => printMaterialRef.value?.toggleRowSelection(row, true));
-    printConfig.sourceData.printList.forEach((row: any) => printPrintRef.value?.toggleRowSelection(row, true));
-    printConfig.sourceData.processList.forEach((row: any) => printProcessRef.value?.toggleRowSelection(row, true));
-    printConfig.sourceData.ctpList.forEach((row: any) => printCtpRef.value?.toggleRowSelection(row, true));
+const calcProductTotal = (prod: any) => {
+  const pq = Number(prod.orderQuantity || 0);
+  const up = Number(prod.unitPrice || 0);
+  prod.totalAmount = (pq && up) ? Number((pq * up).toFixed(2)) : 0.00;
+};
+
+const parseSize = (sizeStr: string, type: 'L' | 'W') => {
+  if (!sizeStr) return 0;
+  const parts = sizeStr.toLowerCase().split(/[x*×]/);
+  if (parts.length >= 2) return type === 'L' ? parseFloat(parts[0]) : parseFloat(parts[1]);
+  return 0;
+};
+
+const getFilteredSuppliers = (processProject: string | undefined | null) => {
+  const toArray = (val: any): string[] => { return val ? (Array.isArray(val) ? val.map(String) : String(val).split(',')) : []; };
+  const options: any[] = customerOptions.value || [];
+  if (!processProject) return options.filter((c: any) => { const t = toArray(c.customerType); return t.includes('2') || t.includes('3'); });
+  let dictItem = rawProcessDictOptions.value.find((d: any) => d.dictLabel === processProject || d.dictValue === processProject);
+  const targetCatId = dictItem?.remark?.trim(); 
+  if (!targetCatId) return options.filter((c: any) => { const t = toArray(c.customerType); return t.includes('2') || t.includes('3'); });
+  return options.filter((c: any) => {
+    const types = toArray(c.customerType);
+    let matchSupplier = types.includes('2') && toArray(c.supplierCategory || c.supplierType).includes(targetCatId);
+    let matchProcessor = types.includes('3') && toArray(c.processorCategory || c.processorType).includes(targetCatId);
+    return matchSupplier || matchProcessor;
   });
 };
 
-const prevProduct = () => {
-  if (printConfig.currentIndex > 0) {
-    const prevIndex = printConfig.currentIndex - 1;
-    openPrintConfig(ticketDialog.productList[prevIndex], prevIndex);
+const handleMaterialChange = (val: string, row: any) => {
+  if (row.sourceType === '本厂') {
+    const found = rawInventoryList.value.find(i => i.itemName === val);
+    if (found) {
+      row.paperSize = found.spec; 
+      if (row.requireQty && row.requireQty > Number(found.currentQty)) proxy?.$modal.msgWarning(`库存仅剩 ${found.currentQty}！`);
+    }
+  } else {
+    const found = rawInventoryList.value.find(i => i.itemName === val);
+    if (found && !row.paperSize) row.paperSize = found.spec;
+  }
+};
+const checkMaterialQty = (val: any, row: any) => {
+  if (row.sourceType === '本厂' && row.paperName) {
+    const found = rawInventoryList.value.find(i => i.itemName === row.paperName);
+    if (found) {
+      const maxQty = Number(found.currentQty || 0);
+      const totalRequested = form.value.productList.reduce((sum: number, p: any) => { return sum + p.materialList.filter((m: any) => m.sourceType === '本厂' && m.paperName === row.paperName).reduce((mSum: number, m: any) => mSum + Number(m.requireQty || 0), 0); }, 0);
+      if (totalRequested > maxQty) proxy?.$modal.msgError(`库存不足预警！总库存为 ${maxQty}，累计需求已达 ${totalRequested}！`);
+    }
   }
 };
 
-const nextProduct = () => {
-  if (printConfig.currentIndex < ticketDialog.productList.length - 1) {
-    const nextIndex = printConfig.currentIndex + 1;
-    openPrintConfig(ticketDialog.productList[nextIndex], nextIndex);
-  }
+const getProcessDetailOptions = (processName: string) => {
+  if (!processName) return [];
+  return (rawProcessDetailOptions.value || [])
+    .filter((d: any) => d.remark && d.remark.split(',').map((s: string) => s.trim()).includes(processName))
+    .map((d: any) => ({ label: d.dictLabel, value: d.dictValue }));
 };
 
-const jumpToModify = () => {
-  printConfig.visible = false;
-  ticketDialog.visible = false;
-  handleUpdate(ticketDialog.fullOrderData);
-};
-
-const executePrint = async () => {
-  const subOrderNo = printConfig.subOrderNo;
-  const wo = ticketDialog.fullOrderData;
-  const product = printConfig.currentProduct;
-
-  let safeDate = '未定';
-  if (product.deliveryDate) {
-    safeDate = String(product.deliveryDate).split(' ')[0].split('T')[0];
-  } else if (wo.deliveryDate) {
-    safeDate = String(wo.deliveryDate).split(' ')[0].split('T')[0];
-  }
-
-  const canvas = document.getElementById('barcodeCanvas') as HTMLCanvasElement;
-  JsBarcode(canvas, subOrderNo, {
-    format: "CODE128",
-    displayValue: true,
-    fontSize: 16,
-    height: 45,
-    margin: 0
-  });
-  const barcodeImg = canvas.toDataURL("image/png");
-
-  const qrDataObj = {
-    "单号": subOrderNo,
-    "PO号": product.customerPo || '无',
-    "料号": product.customerMaterialNo || '无',
-    "数量": product.produceQuantity
+const createQuerySearch = (dictRef: any) => {
+  return (queryString: string, cb: any) => {
+    const dict = dictRef.value || [];
+    const results = queryString
+      ? dict.filter((item: any) => item.label.toLowerCase().includes(queryString.toLowerCase()))
+      : dict;
+    cb(results.map((item: any) => ({ value: item.label })));
   };
-  const qrImg = await QRCode.toDataURL(JSON.stringify(qrDataObj), { width: 80, margin: 1 });
-
-  let materialHtml = printConfig.selectedMaterials.map((m: any, i: number) => `
-    <tr>
-      <td style="text-align:center">${i + 1}、${m.partName || ''}</td>
-      <td style="text-align:center">${m.paperName || ''}</td>
-      <td style="text-align:center">${m.requireQty || ''}</td>
-      <td style="text-align:center">${m.paperSize || ''}</td>
-      <td style="text-align:center">${m.cutMethod || ''}</td>
-    </tr>
-  `).join('');
-
-  let printHtml = printConfig.selectedPrints.map((p: any, i: number) => `
-    <tr>
-      <td style="text-align:center">${i + 1}</td>
-      <td style="text-align:center">${p.machineNo || ''}</td>
-      <td style="text-align:center">${p.printMethod || ''}</td>
-      <td style="text-align:center">${p.printColor || ''}</td>
-      <td style="text-align:center">${p.printSize || ''}</td>
-      <td style="text-align:center">${p.moldNum || ''}</td>
-      <td style="text-align:center">${p.actualPrintQty || ''}</td>
-      <td style="text-align:center">${p.lossQty || ''}</td>
-      <td style="text-align:center">${p.remark || ''}</td>
-    </tr>
-  `).join('');
-
-  let processHtml = printConfig.selectedProcesses.map((p: any, i: number) => `
-    <tr>
-      <td style="text-align:center">${i + 1}</td>
-      <td style="text-align:center">${p.processName || ''}</td>
-      <td style="text-align:left">${p.remark || ''}</td>
-    </tr>
-  `).join('');
-
-  let ctpHtml = printConfig.selectedCtps.map((c: any, i: number) => `
-    <tr>
-      <td style="text-align:center">${i + 1}</td>
-      <td style="text-align:center">${c.partName || ''}</td>
-      <td style="text-align:center">${c.openNum || ''}</td>
-      <td style="text-align:center">${c.printType || ''}</td>
-      <td style="text-align:center">${c.setNum || ''}</td>
-      <td style="text-align:center">${c.plateCount || ''}</td>
-    </tr>
-  `).join('');
-
-  const html = `
-    <html>
-      <head>
-        <title>生产流转单 - ${subOrderNo}</title>
-        <style>
-          body { font-family: "SimSun", "Microsoft YaHei", sans-serif; padding: 20px; color: #000; }
-          .header-box { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 10px; }
-          .header-box h1 { margin: 0; font-size: 26px; color: #00529B; letter-spacing: 2px; }
-          .code-container { display: flex; align-items: center; gap: 15px; } 
-          .barcode-box img { max-height: 60px; }
-          .qrcode-box img { width: 70px; height: 70px; border: 1px solid #ccc; padding: 2px; }
-          table { width: 100%; border-collapse: collapse; font-size: 13px; margin-bottom: 15px; }
-          td, th { border: 1px solid #00529B; padding: 8px 5px; }
-          th { background-color: #E8F2FC; color: #00529B; font-weight: bold; text-align: center; }
-          .title-col { background-color: #E8F2FC; font-weight: bold; width: 80px; text-align: center; color: #00529B; }
-          .highlight { font-size: 18px; font-weight: bold; color: #D32F2F; }
-        </style>
-      </head>
-      <body>
-        <div class="header-box">
-          <div>
-            <h1>梵熙纸业 生产流转单</h1>
-            <div style="margin-top:10px; font-size:14px;">
-              客户名称：<strong>${wo.customerName || ''}</strong>     
-              交货日期：<strong>${safeDate}</strong>
-            </div>
-          </div>
-          <div class="code-container">
-            <div class="qrcode-box">
-              <img src="${qrImg}" alt="QR Code" />
-              <div style="font-size:10px;text-align:center;">扫码看详情</div>
-            </div>
-            <div class="barcode-box">
-              <img src="${barcodeImg}" alt="Barcode" />
-            </div>
-          </div>
-        </div>
-
-        <table>
-          <tr>
-            <td class="title-col">产品名称</td>
-            <td colspan="3" style="font-size: 16px; font-weight:bold;">${product.productName || ''}</td>
-            <td class="title-col">生产数量</td>
-            <td class="highlight">${product.produceQuantity || 0}</td>
-          </tr>
-          <tr>
-            <td class="title-col">客户PO号</td>
-            <td>${product.customerPo || ''}</td>
-            <td class="title-col">物料号</td>
-            <td>${product.customerMaterialNo || ''}</td>
-            <td class="title-col">规格</td>
-            <td>${product.spec || ''}</td>
-          </tr>
-        </table>
-
-        ${printConfig.selectedMaterials.length > 0 ? `
-        <table>
-          <tr><th colspan="5">材 料 领 用 清 单</th></tr>
-          <tr><th>部件</th><th>纸张/材料名称</th><th>数量</th><th>尺寸</th><th>切成</th></tr>
-          ${materialHtml}
-        </table>` : ''}
-
-        ${printConfig.selectedPrints.length > 0 ? `
-        <table>
-          <tr><th colspan="9">印 刷 加 工 要 求</th></tr>
-          <tr><th>序号</th><th>印刷机台</th><th>方式</th><th>印色</th><th>尺寸</th><th>模数</th><th>正数</th><th>印损</th><th>备注</th></tr>
-          ${printHtml}
-        </table>` : ''}
-
-        ${printConfig.selectedProcesses.length > 0 ? `
-        <table>
-          <tr><th colspan="3">生 产 工 艺 明 细</th></tr>
-          <tr><th>序号</th><th>工序名称</th><th>工艺要求/备注</th></tr>
-          ${processHtml}
-        </table>` : ''}
-
-        ${printConfig.selectedCtps.length > 0 ? `
-        <table>
-          <tr><th colspan="6">模 具 制 版 (CTP)</th></tr>
-          <tr><th>序号</th><th>部件</th><th>开数</th><th>印刷方式</th><th>套数</th><th>版数</th></tr>
-          ${ctpHtml}
-        </table>` : ''}
-        
-        <table>
-           <tr><td class="title-col">包装要求</td><td>${wo.packRequirement || '无'}</td></tr>
-           <tr><td class="title-col">工单备注</td><td style="color:red; font-weight:bold;">${wo.remark || '无'}</td></tr>
-        </table>
-      </body>
-    </html>
-  `;
-
-  const newWindow = window.open('', '_blank');
-  newWindow?.document.write(html);
-  newWindow?.document.close();
-
-  setTimeout(() => {
-    newWindow?.print();
-    newWindow?.close();
-  }, 300);
 };
 
-const printDialog = reactive({ visible: false });
-const printData = ref({
-  workOrderNo: '', orderDate: '', groups: [] as any[]
+const querySearchPack = createQuerySearch(erp_pack_type);
+const querySearchLogistics = createQuerySearch(erp_logistics_type);
+const querySearchPart = createQuerySearch(erp_item_type);
+
+const querySearchMaterial = (queryString: string, cb: any) => {
+  const list = rawInventoryList.value || [];
+  const results = queryString
+    ? list.filter((item: any) => item.itemName.toLowerCase().includes(queryString.toLowerCase()))
+    : list;
+  const seen = new Set<string>();
+  const deduped = results.filter((item: any) => {
+    const key = `${item.itemName}||${item.spec || ''}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  cb(deduped.map((item: any) => ({
+    value: item.itemName,
+    spec: item.spec || '',
+    currentQty: item.currentQty || 0
+  })));
+};
+
+const getAllPrintProcessNames = () => {
+  const names: string[] = [];
+  (erp_print_type.value || []).forEach((d: any) => names.push(d.label));
+  const categories = erp_processor_category.value || [];
+  const printCategoryValues = categories
+    .filter((c: any) => c.label.includes('印刷'))
+    .map((c: any) => String(c.value));
+  (rawProcessDictOptions.value || []).forEach((proc: any) => {
+    if (proc.remark && printCategoryValues.includes(proc.remark.trim())) {
+      names.push(proc.dictLabel);
+    }
+  });
+  return names;
+};
+
+const hasPrintProcessInOutsourcing = (pIndex: any) => {
+  const product = form.value.productList[pIndex];
+  if (!product || !product.outsourcingList) return false;
+  const printNames = getAllPrintProcessNames();
+  return product.outsourcingList.some((row: any) => printNames.includes(row.processProject));
+};
+
+const isPrintRow = (row: any) => {
+  if (!row || !row.processProject) return false;
+  return getAllPrintProcessNames().includes(row.processProject);
+};
+
+const allOutsourcingProjects = computed(() => { const prints = erp_print_type.value || []; const processes = erp_process_name.value || []; return [...prints, ...processes]; });
+const processTreeData = computed(() => {
+  const tree: any[] = []; const categories = erp_processor_category.value || []; const processes = rawProcessDictOptions.value || []; const prints = erp_print_type.value || [];
+  if (prints.length > 0) tree.push({ value: '印刷车间(并入)', label: '印刷车间(并入)', children: prints.map((p: any) => ({ value: p.label, label: p.label })) });
+  categories.forEach((cat: any) => {
+    const parentNode = { value: cat.label, label: cat.label, children: [] as any[] };
+    processes.forEach((proc: any) => { if (proc.remark && proc.remark.trim() === String(cat.value)) parentNode.children.push({ value: proc.dictLabel, label: proc.dictLabel }); });
+    if (parentNode.children.length > 0) tree.push(parentNode);
+  });
+  const unclassifiedNode = { value: '其他未分类', label: '其他工艺(未配置关联)', children: [] as any[] };
+  processes.forEach((proc: any) => { if (!proc.remark || !categories.find((c: any) => String(c.value) === proc.remark.trim())) unclassifiedNode.children.push({ value: proc.dictLabel, label: proc.dictLabel }); });
+  if (unclassifiedNode.children.length > 0) tree.push(unclassifiedNode);
+  return tree;
 });
+
+const processTableRefs = ref<any>({});
+
+const selectedProcessRows = reactive<Record<string, any[]>>({});
+
+const handleProcessSelectionChange = (pIndex: any, rows: any[]) => {
+  selectedProcessRows[String(pIndex)] = rows;
+};
+
+const batchProcessSelection = ref<string[]>([]);
+const confirmBatchAddProcess = (pIndex: any) => {
+  const product = form.value.productList[pIndex];
+  if (!batchProcessSelection.value || batchProcessSelection.value.length === 0) { proxy?.$modal.msgWarning("请勾选至少一项！"); return; }
+  let addedCount = 0;
+  batchProcessSelection.value.forEach(processName => {
+    const exists = product.processList.find((p: any) => p.processName === processName);
+    if (!exists) { product.processList.push({ processName: processName, processDetail: '', remark: '' }); addedCount++; }
+  });
+  if (addedCount > 0) proxy?.$modal.msgSuccess(`批量生成 ${addedCount} 项明细！`);
+  batchProcessSelection.value = [];
+};
+
+const transferSelectedToOutsourcing = (pIndex: any) => {
+  const product = form.value.productList[pIndex];
+  const rows = selectedProcessRows[String(pIndex)] || [];
+  if (rows.length === 0) { proxy?.$modal.msgWarning("请先在表格左侧勾选要转委外的工序！"); return; }
+  const firstMat = product.materialList.length > 0 ? product.materialList[0] : null;
+  let count = 0;
+  rows.forEach((proc: any) => {
+    if (!proc.processName) return;
+    const exists = product.outsourcingList.find((item: any) => item.processProject === proc.processName);
+    if (!exists) {
+      product.outsourcingList.push({
+        productName: product.productName,
+        materialName: firstMat ? (firstMat.paperName || '') : '',
+        length: firstMat ? parseSize(firstMat.paperSize, 'L') : undefined,
+        width: firstMat ? parseSize(firstMat.paperSize, 'W') : undefined,
+        height: undefined,
+        processQty: product.produceQuantity,
+        processProject: proc.processName,
+        processDetail: proc.processDetail || '',
+        unit: '平方米',
+        unitPrice: undefined,
+        totalPrice: 0,
+        remark: proc.remark
+      });
+      count++;
+    }
+  });
+  if (count > 0) {
+    proxy?.$modal.msgSuccess(`已将勾选的 ${count} 条工序转入委外！`);
+  } else {
+    proxy?.$modal.msgWarning("勾选的工序均已转过委外。");
+  }
+};
+
+const handleCustomerChange = (val: any) => { const selected = customerOptions.value.find(item => String(item.id) === String(val)); if (selected) form.value.customerName = selected.companyName; };
+const getCustomerList = async () => { const res = await listCustomer({ pageNum: 1, pageSize: 1000 } as any); customerOptions.value = res.rows; };
+const getList = async () => { loading.value = true; const res = await listWorkOrder(queryParams.value); workOrderList.value = res.rows; total.value = res.total; loading.value = false; };
+const handleAdd = () => { isView.value = false; form.value = JSON.parse(JSON.stringify(initFormData)); addProductLine(); dialog.visible = true; dialog.title = "新建生产总单"; };
+const handleUpdate = async (row?: any) => { isView.value = false; await loadFormData(row.id); dialog.visible = true; dialog.title = "修改生产总单"; };
+const handleView = async (row: any) => { isView.value = true; await loadFormData(row.id); dialog.visible = true; dialog.title = "查看生产总单 - " + row.workOrderNo; };
+const handleDelete = async (row?: any) => { await proxy?.$modal.confirm('确认删除工单？'); await delWorkOrder(row.id); proxy?.$modal.msgSuccess("删除成功"); await getList(); };
+
+
+const cancel = () => { dialog.visible = false; };
+const handleAudit = (row: any) => { auditForm.value = { id: row.id, auditStatus: '2' }; auditDialog.visible = true; };
+const submitAudit = async () => { await auditWorkOrder(auditForm.value); proxy?.$modal.msgSuccess("审批成功"); auditDialog.visible = false; getList(); };
+const handleExportList = () => { proxy?.download('erp/workOrder/export', { ...queryParams.value }, `工单列表_${new Date().getTime()}.xlsx`) };
+const handleQuery = () => { queryParams.value.pageNum = 1; getList(); };
+const resetQuery = () => { queryFormRef.value?.resetFields(); handleQuery(); };
 
 const handlePushAllOutsourcing = async (row: any) => {
   try {
-    const checkRes = await request({
-      url: '/erp/outsourcingReceipt/list',
-      method: 'get',
-      params: { workOrderNo: row.workOrderNo, pageNum: 1, pageSize: 1 }
-    }) as any;
-    
-    if (checkRes.rows && checkRes.rows.length > 0) {
-      proxy?.$modal.msgWarning("该工单已下发过委外任务，请勿重复操作！请前往【委外收货与结算】查看。");
-      return;
-    }
-
-    proxy?.$modal.confirm(`确认将工单【${row.workOrderNo}】内的所有委外明细一键下发，并生成待收货记录吗？`).then(async () => {
+    const checkRes = await request({ url: '/erp/outsourcingReceipt/list', method: 'get', params: { workOrderNo: row.workOrderNo, pageNum: 1, pageSize: 1 } }) as any;
+    if (checkRes.rows && checkRes.rows.length > 0) { proxy?.$modal.msgWarning("该工单已下发过委外任务！请前往收货页查看。"); return; }
+    proxy?.$modal.confirm(`确认一键下发工单【${row.workOrderNo}】？`).then(async () => {
       loading.value = true;
-      const res = await getWorkOrder(row.id);
-      const woDetail = res.data as any;
-      const outList = woDetail.outsourcingList || woDetail.bizWoOutsourcingList || [];
-      
-      if (outList.length === 0) {
-        proxy?.$modal.msgWarning("该工单没有填写任何委外加工数据！");
-        loading.value = false;
-        return;
-      }
-
+      const res = await getWorkOrder(row.id); const woDetail = res.data as any; const outList = woDetail.outsourcingList || woDetail.bizWoOutsourcingList || [];
+      if (outList.length === 0) { proxy?.$modal.msgWarning("没有有效委外数据！"); loading.value = false; return; }
       let pushedCount = 0;
       for (const item of outList) {
         if (!item.supplierId || !item.processProject) continue; 
-        
-        const receiptData = {
-          workOrderNo: row.workOrderNo,
-          productName: item.productName,
-          materialName: item.materialName,
-          processProject: item.processProject,
-          supplierId: item.supplierId,
-          sentQty: item.processQty || 0, 
-          receivedQty: item.processQty || 0, 
-          priceMethod: item.unit || '张',
-          unitPrice: item.unitPrice,
-          totalFee: item.totalPrice,
-          receiptDate: proxy?.parseTime(new Date(), '{y}-{m}-{d} {h}:{i}:{s}')
-        };
-
-        await request({
-          url: '/erp/workOrder/pushOutsourcing',
-          method: 'post',
-          data: receiptData
-        });
-        pushedCount++;
+        const receiptData = { workOrderNo: row.workOrderNo, productName: item.productName, materialName: item.materialName, processProject: item.processProject, processDetail: item.processDetail, supplierId: item.supplierId, sentQty: item.processQty || 0, receivedQty: item.processQty || 0, priceMethod: item.unit || '张', unitPrice: item.unitPrice, totalFee: item.totalPrice, receiptDate: proxy?.parseTime(new Date(), '{y}-{m}-{d} {h}:{i}:{s}') };
+        await request({ url: '/erp/workOrder/pushOutsourcing', method: 'post', data: receiptData }); pushedCount++;
       }
-      
       loading.value = false;
-      if (pushedCount > 0) {
-         proxy?.$modal.msgSuccess(`成功下发 ${pushedCount} 条委外记录！请加工商送回后，前往【委外收货】页面结算加工费。`);
-      } else {
-         proxy?.$modal.msgWarning("未找到有效的委外数据（请检查工单中是否遗漏选择了加工商）。");
-      }
+      if (pushedCount > 0) proxy?.$modal.msgSuccess(`成功下发 ${pushedCount} 条委外记录！`); else proxy?.$modal.msgWarning("无数据下发。");
     }).catch(() => {});
-  } catch (error) {
-    console.error(error);
-    loading.value = false;
-  }
+  } catch (error) { console.error(error); loading.value = false; }
 };
 
-const digitUppercase = (n: number) => {
-  if (n === null || n === undefined || isNaN(n)) return '零元整';
-  
-  const fraction = ['角', '分'];
-  const digit = ['零', '壹', '贰', '叁', '肆', '伍', '陆', '柒', '捌', '玖'];
-  const unit = [['元', '万', '亿'], ['', '拾', '佰', '仟']];
-  let head = n < 0 ? '欠' : '';
-  n = Math.abs(n);
-  let s = '';
-  for (let i = 0; i < fraction.length; i++) {
-    s += (digit[Math.floor(n * 10 * Math.pow(10, i)) % 10] + fraction[i]).replace(/零./, '');
-  }
-  s = s || '整';
-  n = Math.floor(n);
-  for (let i = 0; i < unit[0].length && n > 0; i++) {
-    let p = '';
-    for (let j = 0; j < unit[1].length && n > 0; j++) {
-      p = digit[n % 10] + unit[1][j] + p;
-      n = Math.floor(n / 10);
-    }
-    s = p.replace(/(零.)*零$/, '').replace(/^$/, '零') + unit[0][i] + s;
-  }
+const digitUppercase = (n: any) => {
+  let num = Number(n);
+  if (num === null || num === undefined || isNaN(num)) return '零元整';
+  const fraction = ['角', '分']; const digit = ['零', '壹', '贰', '叁', '肆', '伍', '陆', '柒', '捌', '玖']; const unit = [['元', '万', '亿'], ['', '拾', '佰', '仟']]; let head = num < 0 ? '欠' : ''; num = Math.abs(num); let s = '';
+  for (let i = 0; i < fraction.length; i++) { s += (digit[Math.floor(num * 10 * Math.pow(10, i)) % 10] + fraction[i]).replace(/零./, ''); } s = s || '整'; num = Math.floor(num);
+  for (let i = 0; i < unit[0].length && num > 0; i++) { let p = ''; for (let j = 0; j < unit[1].length && num > 0; j++) { p = digit[num % 10] + unit[1][j] + p; num = Math.floor(num / 10); } s = p.replace(/(零.)*零$/, '').replace(/^$/, '零') + unit[0][i] + s; }
   return head + s.replace(/(零.)*零元/, '元').replace(/(零.)+/g, '零').replace(/^整$/, '零元整');
+};
+
+const handlePrintFull = async (row: any) => {
+  fullPrintDialog.visible = true; fullPrintDialog.loading = true;
+  try {
+    const res = await getPrintWorkOrder(row.id);
+    fullPrintData.value = res.data;
+    // 生成条形码和二维码
+    await nextTick();
+    const woNo = fullPrintData.value.workOrderNo || '';
+    const canvas = document.getElementById('barcodeCanvas') as HTMLCanvasElement;
+    JsBarcode(canvas, woNo, { format: "CODE128", displayValue: true, fontSize: 16, height: 45, margin: 0 });
+    fullPrintBarcode.value = canvas.toDataURL("image/png");
+    const qrText = [
+      `工单号: ${woNo}`,
+      `客户: ${fullPrintData.value.customerName || ''}`,
+      `品名: ${fullPrintData.value.productNames || ''}`,
+      `数量: ${fullPrintData.value.quantities || ''}`,
+      `交期: ${fullPrintData.value.deliveryDate || ''}`
+    ].join('\n');
+    fullPrintQrcode.value = await QRCode.toDataURL(qrText, { width: 80, margin: 1 });
+  } catch (e) { console.error(e); proxy?.$modal.msgError("加载工程单数据失败"); }
+  finally { fullPrintDialog.loading = false; }
+};
+
+const formatSize = (item: any) => {
+  if (!item) return '';
+  if (item.length || item.width) {
+    const parts = [item.length, item.width].filter(v => v !== null && v !== undefined && v !== '' && Number(v) !== 0);
+    if (item.height && Number(item.height) !== 0) parts.push(item.height);
+    return parts.join('*');
+  }
+  return item.finishSize || '';
+};
+
+const getSupplierName = (supplierId: any) => {
+  if (!supplierId) return '';
+  const supplier = customerOptions.value.find(c => String(c.id) === String(supplierId));
+  return supplier ? (supplier.shortName || supplier.companyName) : String(supplierId);
+};
+
+const exportFullPrintExcel = () => {
+  const content = document.getElementById('fullPrintArea')?.innerHTML;
+  if (!content) return;
+  const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="UTF-8"><style>.full-print-table { width:100%; border-collapse:collapse; font-family:"SimSun"; font-size:12px; } .full-print-table td { border:1px solid #000000; padding:4px; } .fp-label { font-weight:bold; text-align:center; background-color:#f0f0f0; } .fp-header-row { background-color:#e8e8e8; font-weight:bold; text-align:center; } .fp-section-title { font-weight:bold; font-size:14px; margin:10px 0 5px; }</style></head><body>${content}</body></html>`;
+  const blob = new Blob([html], { type: 'application/vnd.ms-excel' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `工程单_${fullPrintData.value.workOrderNo || 'unknown'}.xls`;
+  a.click(); URL.revokeObjectURL(url);
+};
+
+const doFullPrint = () => {
+  const content = document.getElementById('fullPrintArea')?.innerHTML;
+  if (!content) return;
+
+  const woNo = fullPrintData.value.workOrderNo || '';
+  const qrImg = fullPrintQrcode.value;
+  const barcodeImg = fullPrintBarcode.value;
+
+  const w = window.open('', '_blank');
+  w?.document.write(`<html><head><title>工程单 - ${woNo}</title><style>
+    body { font-family: "SimSun","Microsoft YaHei",sans-serif; padding:15px; color:#000; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+    .print-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; padding-bottom:8px; border-bottom:2px solid #000; }
+    .print-header .qr { width:70px; flex-shrink:0; }
+    .print-header .title { flex:1; text-align:center; }
+    .print-header .barcode { flex-shrink:0; text-align:right; }
+    .full-print-table { width:100%; border-collapse:collapse; font-size:12px; }
+    .full-print-table td { border:1px solid #000; padding:4px; }
+    .fp-label { font-weight:bold; text-align:center; background-color:#f0f0f0; }
+    .fp-header-row { background-color:#e8e8e8; font-weight:bold; text-align:center; }
+    .fp-section-title { font-weight:bold; font-size:14px; margin:10px 0 5px; }
+    @media print { body { padding:5px; } }
+  </style></head><body>
+    <div class="print-header">
+      <div class="qr">${qrImg ? `<img src="${qrImg}" style="width:65px; height:65px;"/>` : ''}</div>
+      <div class="title"><h2 style="margin:0; font-size:20px; font-weight:bold; letter-spacing:3px;">${fullPrintData.value.companyName || ''}——工程单</h2></div>
+      <div class="barcode">${barcodeImg ? `<img src="${barcodeImg}" style="max-height:50px;"/>` : ''}</div>
+    </div>
+    ${content}
+  </body></html>`);
+  w?.document.close();
+  setTimeout(() => { w?.print(); w?.close(); }, 300);
 };
 
 const handlePrintOutsourcing = async (row: any) => {
   try {
-    console.log("=== 正在请求工单数据 ===", row.id);
-    const res = await getWorkOrder(row.id);
-    const woDetail = res.data as any; 
-    
-    if (!woDetail) {
-      proxy?.$modal.msgError("获取工单详情失败！");
-      return;
-    }
-
+    const res = await getWorkOrder(row.id); const woDetail = res.data as any;
+    if (!woDetail) return;
     const outList = woDetail.outsourcingList || woDetail.bizWoOutsourcingList || [];
-    console.log("获取到的委外明细列表:", outList);
-    
-    if (outList.length === 0) {
-      proxy?.$modal.msgWarning("该工单暂无委外加工数据");
-      return;
-    }
+    if (outList.length === 0) { proxy?.$modal.msgWarning("该工单暂无委外数据"); return; }
 
     printData.value.workOrderNo = woDetail.workOrderNo || '未知单号';
-    
     let safeDate = '未定';
-    if (woDetail.createTime) {
-      safeDate = String(woDetail.createTime).split(' ')[0].replace(/-/g, '/');
-    } else if (woDetail.orderDate) {
-      safeDate = String(woDetail.orderDate).split(' ')[0].replace(/-/g, '/');
-    }
+    if (woDetail.createTime) safeDate = String(woDetail.createTime).split(' ')[0].replace(/-/g, '/');
+    else if (woDetail.orderDate) safeDate = String(woDetail.orderDate).split(' ')[0].replace(/-/g, '/');
     printData.value.orderDate = safeDate;
     
     const groupsMap = new Map();
     outList.forEach((item: any) => {
       const supplier = customerOptions.value.find(c => String(c.id) === String(item.supplierId));
       const supplierName = supplier ? supplier.companyName : '未知加工商';
-      
-      if (!groupsMap.has(supplierName)) {
-        groupsMap.set(supplierName, { 
-          supplierName: supplierName, 
-          supplierAddress: supplier?.companyAddress || '详见系统记录', 
-          items: [], 
-          totalAmount: 0 
-        });
-      }
+      if (!groupsMap.has(supplierName)) groupsMap.set(supplierName, { supplierName: supplierName, supplierAddress: supplier?.companyAddress || '详见系统记录', items: [], totalAmount: 0 });
       const group = groupsMap.get(supplierName);
       group.items.push(item);
       group.totalAmount += (Number(item.totalPrice) || 0);
     });
-
-    console.log("构建的打印分组数据:", Array.from(groupsMap.values()));
     printData.value.groups = Array.from(groupsMap.values());
-    
     printDialog.visible = true;
-    console.log("=== 弹窗已成功触发 ===");
-    
-  } catch (error) {
-    console.error("生成委外单遭遇致命错误:", error);
-    alert("生成委外单时发生未知错误，请按 F12 检查控制台红字！");
-  }
+  } catch (error) { console.error(error); }
 };
 
 const exportExcel = () => {
-  const printContent = document.getElementById('printArea')?.innerHTML;
-  if (!printContent) return;
-  
-  const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
-    <head>
-      <meta charset="UTF-8">
-      <style>
-        .print-table { width: 100%; border-collapse: collapse; font-family: "SimSun"; font-size: 12px; }
-        .print-table td { border: 1px solid #000000; text-align: center; vertical-align: middle; }
-        .left-align { text-align: left !important; }
-        .font-bold { font-weight: bold; }
-        .grey-bg { background-color: #e8e8e8; }
-        .print-page { margin-bottom: 40px; }
-        .center-align { text-align: center; mso-number-format:"\\@"; }
-      </style>
-    </head>
-    <body>${printContent}</body>
-  </html>`;
-  
-  const blob = new Blob([html], { type: 'application/vnd.ms-excel' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `委外单_${printData.value.workOrderNo}.xls`; 
-  a.click();
-  URL.revokeObjectURL(url);
+  const printContent = document.getElementById('printArea')?.innerHTML; if (!printContent) return;
+  const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="UTF-8"><style>.print-table { width: 100%; border-collapse: collapse; font-family: "SimSun"; font-size: 12px; } .print-table td { border: 1px solid #000000; text-align: center; vertical-align: middle; } .left-align { text-align: left !important; } .font-bold { font-weight: bold; } .grey-bg { background-color: #e8e8e8; } .print-page { margin-bottom: 40px; } .center-align { text-align: center; mso-number-format:"\\@"; }</style></head><body>${printContent}</body></html>`;
+  const blob = new Blob([html], { type: 'application/vnd.ms-excel' }); const url = URL.createObjectURL(blob); const a = document.createElement('a');
+  a.href = url; a.download = `委外单_${printData.value.workOrderNo}.xls`; a.click(); URL.revokeObjectURL(url);
 };
 
 const doPrint = () => {
-  const printContent = document.getElementById('printArea')?.innerHTML;
-  if (!printContent) return;
+  const printContent = document.getElementById('printArea')?.innerHTML; if (!printContent) return;
   const newWindow = window.open('', '_blank');
-  newWindow?.document.write(`
-    <html>
-      <head>
-        <title>打印委外加工单</title>
-        <style>
-          body { font-family: "SimSun", "Microsoft YaHei", sans-serif; padding: 20px; }
-          .print-page { page-break-after: always; margin-bottom: 50px; }
-          .print-header { text-align: center; margin-bottom: 10px; position: relative; }
-          .print-header h1 { margin: 0; font-size: 24px; padding-bottom: 10px;}
-          .print-table { width: 100%; border-collapse: collapse; font-size: 12px; }
-          .print-table td, .print-table th { border: 1px solid #00; padding: 6px 4px; word-break: break-all; }
-          .grey-bg { background-color: #e8e8e8 !important; -webkit-print-color-adjust: exact; color-adjust: exact; }
-          .center-align { text-align: center; }
-          .left-align { text-align: left !important; }
-          .font-bold { font-weight: bold; }
-          .text-lg { font-size: 16px; }
-          .memo-text { line-height: 1.5; font-size: 11px; }
-        </style>
-      </head>
-      <body>${printContent}</body>
-    </html>
-  `);
-  newWindow?.document.close();
-  setTimeout(() => {
-    newWindow?.print();
-    newWindow?.close();
-  }, 200);
+  newWindow?.document.write(`<html><head><title>打印委外加工单</title><style>body { font-family: "SimSun", "Microsoft YaHei", sans-serif; padding: 20px; } .print-page { page-break-after: always; margin-bottom: 50px; } .print-header { text-align: center; margin-bottom: 10px; position: relative; } .print-header h1 { margin: 0; font-size: 24px; padding-bottom: 10px;} .print-table { width: 100%; border-collapse: collapse; font-size: 12px; } .print-table td, .print-table th { border: 1px solid #00; padding: 6px 4px; word-break: break-all; } .grey-bg { background-color: #e8e8e8 !important; -webkit-print-color-adjust: exact; color-adjust: exact; } .center-align { text-align: center; } .left-align { text-align: left !important; } .font-bold { font-weight: bold; } .text-lg { font-size: 16px; } .memo-text { line-height: 1.5; font-size: 11px; }</style></head><body>${printContent}</body></html>`);
+  newWindow?.document.close(); setTimeout(() => { newWindow?.print(); newWindow?.close(); }, 200);
+};
+
+const loadInventoryData = async () => {
+  try {
+    const res = await listInventory({ pageNum: 1, pageSize: 2000 } as any);
+    const list = res.rows || [];
+    rawInventoryList.value = list; 
+    const groups: Record<string, any[]> = {};
+    list.forEach((item: any) => {
+      const dictItem = erp_item_type.value?.find((d: any) => String(d.value) === String(item.itemType) || String(d.label) === String(item.itemType));
+      const typeLabel = dictItem ? dictItem.label : (item.itemType || '其他');
+      if (!groups[typeLabel]) groups[typeLabel] = [];
+      if (!groups[typeLabel].find(i => i.itemName === item.itemName && i.spec === item.spec)) {
+        groups[typeLabel].push(item);
+      }
+    });
+    inventoryOptions.value = Object.keys(groups).map(key => ({ label: key, options: groups[key] }));
+  } catch (e) { console.error(e); }
 };
 
 onMounted(() => { 
-  getList(); 
-  getCustomerList(); 
-  loadInventoryData(); 
-
-  getDicts('erp_process_name').then((res: any) => {
-    rawProcessDictOptions.value = res.data || [];
-  });
-
-  if (route.query.action === 'add') {
-    handleAdd();
-  }
+  getList(); getCustomerList(); loadInventoryData(); 
+  getDicts('erp_process_name').then((res: any) => { rawProcessDictOptions.value = res.data || []; });
+  getDicts('erp_process_detail').then((res: any) => { rawProcessDetailOptions.value = res.data || []; });
+  if (route.query.action === 'add') { handleAdd(); }
 });
 </script>
+
+<style scoped>
+.hide-first-level-checkbox .el-cascader-menu:first-child .el-checkbox {
+  display: none !important;
+}
+
+.full-print-table td {
+  vertical-align: middle;
+}
+.full-print-table .fp-label {
+  font-weight: bold;
+  text-align: center;
+  background-color: #f0f0f0;
+}
+.full-print-table .fp-header-row td {
+  background-color: #e8e8e8;
+  font-weight: bold;
+  text-align: center;
+}
+.fp-section-title {
+  font-weight: bold;
+  font-size: 14px;
+  margin: 12px 0 5px;
+  padding: 2px 0 2px 8px;
+  border-left: 3px solid #409EFF;
+}
+</style>

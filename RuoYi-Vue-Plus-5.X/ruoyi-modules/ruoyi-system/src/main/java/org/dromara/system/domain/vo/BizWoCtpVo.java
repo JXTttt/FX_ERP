@@ -29,7 +29,7 @@ public class BizWoCtpVo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     /**
-     * 
+     *
      */
     @ExcelProperty(value = "")
     private Long id;
@@ -75,6 +75,9 @@ public class BizWoCtpVo implements Serializable {
      */
     @ExcelProperty(value = "CTP版张数")
     private Long plateCount;
+
+    @ExcelProperty(value = "产品名字")
+    private String productName;
 
     /**
      * 备注
